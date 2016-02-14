@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import lights
 from lightclient import LightClient
@@ -107,7 +107,7 @@ def rainbow():
 			wavelength = mp(led, 0, leds.ledArraySize, 780, 380)
 			color = wavelengthToRGB(wavelength)
 			leds.changeColor(x, color)
-			
+
 			#print("x={0}, offset={1}, color={2}".format(x, offset, color))
 
 			x += 1
@@ -115,6 +115,113 @@ def rainbow():
 		offset += 1
 
 		yield asyncio.From(asyncio.sleep(delay))
+
+@asyncio.coroutine
+def larsonScanner():
+
+	length = 5
+	led = 0
+	led2 = leds.ledArraySize - 1
+	side1 = 140
+
+	direction = "forward"
+	direction2 = "forward"
+
+	delay = 0.02
+
+	while True:
+
+		leds.clear()
+
+		for l in range(length):
+
+			if led + length > side1:
+				direction = "backwards"
+				continue
+			
+			if led < 0:
+				direction = "forward"
+				continue
+
+			leds.changeColor(led + l, (255, 0, 0))
+
+		for l in range(length):
+			if led2 - length < side1:
+				direction2 = "backwards"
+				break
+			
+			if led2 >= leds.ledArraySize:
+				direction2 = "forward"
+				break
+
+			leds.changeColor(led2 - l, (255, 0, 0))
+
+		if direction == "forward":
+			led += 1
+		else:
+			led -= 1
+			
+		if direction2 == "forward":
+			led2 -= 1
+		else:
+			led2 += 1
+
+
+		yield asyncio.From(asyncio.sleep(delay))
+
+@asyncio.coroutine
+def larsonScanner2():
+
+	length = 5
+	led = 0
+	led2 = leds.ledArraySize - 1
+	side1 = 140
+
+	direction = "forward"
+	direction2 = "forward"
+
+	delay = 0.05
+
+	while True:
+
+		#leds.clear()
+
+		for l in range(length):
+
+			if led + length > side1:
+				direction = "backwards"
+				continue
+			
+			if led < 0:
+				direction = "forward"
+				continue
+
+			leds.transformColorTo(led + l, (255, 0, 0), 0.001).then(leds.transformColorTo, led + l, (0, 0, 0), 0.001)
+
+		for l in range(length):
+			if led2 - length < side1:
+				direction2 = "backwards"
+				break
+			
+			if led2 >= leds.ledArraySize:
+				direction2 = "forward"
+				break
+
+			leds.transformColorTo(led2 - l, (255, 0, 0), 0.001).then(leds.transformColorTo, led2 - l, (0, 0, 0), 0.001)
+
+		if direction == "forward":
+			led += 1
+		else:
+			led -= 1
+			
+		if direction2 == "forward":
+			led2 -= 1
+		else:
+			led2 += 1
+
+
+		yield asyncio.From(asyncio.sleep(delay))
+
 
 
 @asyncio.coroutine
@@ -165,24 +272,33 @@ if __name__ == "__main__":
 	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int)
 	parser.add_argument('--fps', dest="fps", help="frames per second", type=int, default=5)
 	parser.add_argument('--chase', dest="chase", help="do chase animation in a loop", action='store_true')
+	parser.add_argument('--larson', dest="larson", help="do larson animation in a loop", action='store_true')
 	parser.add_argument('--rainbow', dest="rainbow", help="do rainbow wave animation in a loop", action='store_true')
+	parser.add_argument('--driver', dest="driver", help="driver to use", default="Apa102")
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	args = parser.parse_args()
 
-	client = LightClient()
-
 	loop = asyncio.get_event_loop()
 
-	client.connectTo(args.address, args.port)
+	Driver = lights.getDriver(args.driver)
+	driver = Driver(debug=args.debug)
+
+
+	if args.driver == "LightProtocol":
+		driver.connectTo(args.address, args.port)
+		driver.setNumLeds(args.numLeds)
 	
-	leds = lights.LightArray2(args.numLeds, client, fps=args.fps)
+	leds = lights.LightArray2(args.numLeds, driver, fps=args.fps)
+	
 	leds.clear()
 
 	if args.chase:
 		loop.create_task(chaser())
 	elif args.rainbow:
 		loop.create_task(rainbow())
+	elif args.larson:
+		loop.create_task(larsonScanner())
 	else:
 		loop.create_task(randomRainbowTransforms())
 
