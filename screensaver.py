@@ -1,0 +1,199 @@
+#!/usr/bin/env python
+
+import lights
+from lightclient import LightClient
+import random
+import trollius as asyncio
+
+leds = None
+
+def done():
+	print("done")
+
+def p(msg):
+	print(msg)
+
+def wavelengthToRGB(wavelength):
+	gamma = 0.80;
+	intensityMax = 255;
+
+	""" Taken from Earl F. Glynn's web page:
+	* <a href="http://www.efg2.com/Lab/ScienceAndEngineering/Spectra.htm">Spectra Lab Report</a>
+	"""
+
+	factor = None
+	r = None
+	g = None
+	b = None
+
+	if((wavelength >= 380) and (wavelength<440)):
+		r = -(wavelength - 440) / (440 - 380)
+		g = 0.0
+		b = 1.0
+	elif((wavelength >= 440) and (wavelength<490)):
+		r = 0.0
+		g = (wavelength - 440) / (490 - 440)
+		b = 1.0
+	elif((wavelength >= 490) and (wavelength<510)):
+		r = 0.0
+		g = 1.0
+		b = -(wavelength - 510) / (510 - 490)
+	elif((wavelength >= 510) and (wavelength<580)):
+		r = (wavelength - 510) / (580 - 510)
+		g = 1.0
+		b = 0.0
+	elif((wavelength >= 580) and (wavelength<645)):
+		r = 1.0
+		g = -(wavelength - 645) / (645 - 580)
+		b = 0.0
+	elif((wavelength >= 645) and (wavelength<781)):
+		r = 1.0
+		g = 0.0
+		b = 0.0
+	else:
+		r = 0.0
+		g = 0.0
+		b = 0.0
+
+	# Let the intensity fall off near the vision limits
+	if((wavelength >= 380) and (wavelength<420)):
+	    factor = 0.3 + 0.7*(wavelength - 380) / (420 - 380)
+	elif((wavelength >= 420) and (wavelength<701)):
+	    factor = 1.0
+	elif((wavelength >= 701) and (wavelength<781)):
+	    factor = 0.3 + 0.7*(780 - wavelength) / (780 - 700)
+	else:
+	    factor = 0.0
+
+	# Don't want 0^x = 1 for x != 0
+	
+	r = int(round(intensityMax * pow(r * factor, gamma)))
+	g = int(round(intensityMax * pow(g * factor, gamma)))
+	b = int(round(intensityMax * pow(b * factor, gamma)))
+
+	return (r, g, b)
+
+def mp(x, in_min, in_max, out_min, out_max):
+	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+def wrap( kX, kLowerBound, kUpperBound):
+
+	range_size = kUpperBound - kLowerBound + 1
+
+	if (kX < kLowerBound):
+		kX += range_size * ((kLowerBound - kX) / range_size + 1)
+
+	return kLowerBound + (kX - kLowerBound) % range_size
+
+
+@asyncio.coroutine
+def rainbow():
+
+	delay = 0.01
+
+	offset = 0
+
+	while True:			
+		if offset > leds.ledArraySize:
+			offset = 0
+
+		x = offset
+
+		for led in range(leds.ledArraySize):
+			
+			if x >= leds.ledArraySize:
+				x = 0
+
+			wavelength = mp(led, 0, leds.ledArraySize, 780, 380)
+			color = wavelengthToRGB(wavelength)
+			leds.changeColor(x, color)
+			
+			#print("x={0}, offset={1}, color={2}".format(x, offset, color))
+
+			x += 1
+
+		offset += 1
+
+		yield asyncio.From(asyncio.sleep(delay))
+
+
+@asyncio.coroutine
+def chaser():
+	print ("doing chaser...")
+	loop = asyncio.get_event_loop()
+
+	leds.clear()
+	animation = lights.SequentialAnimation()
+
+	delay = 50
+	time = leds.ledArraySize * delay
+
+	r = random.randint(0, 255)
+	g = random.randint(0, 255)
+	b = random.randint(0, 255)
+
+	print ("chase color: ", r, g, b)
+
+	animation.addAnimation(leds.chase, (r, g, b), time, delay)
+
+	animation.start().then(loop.create_task, chaser())
+
+@asyncio.coroutine
+def randomRainbowTransforms():
+	print( "rainbow...")
+	loop = asyncio.get_event_loop()
+
+	concurrentTransform = lights.ConcurrentAnimation()
+
+	r = random.randint(0, 255)
+	g = random.randint(0, 255)
+	b = random.randint(0, 255)
+	for i in range(leds.ledArraySize):
+		concurrentTransform.addAnimation(leds.transformColorTo, i, (r,g,b), 1000)
+
+	concurrentTransform.start().then(loop.create_task, randomRainbowTransforms())
+
+
+def pickRandomAnimation():
+	animations = [randomRainbowTransforms, chaser]
+	random.choice(animations)()
+
+if __name__ == "__main__":
+	import argparse
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--debug', dest="debug", help="turn on debugging.", action='store_true')
+	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int)
+	parser.add_argument('--fps', dest="fps", help="frames per second", type=int, default=5)
+	parser.add_argument('--chase', dest="chase", help="do chase animation in a loop", action='store_true')
+	parser.add_argument('--rainbow', dest="rainbow", help="do rainbow wave animation in a loop", action='store_true')
+	parser.add_argument('address', help="address", default="localhost", nargs="?")
+	parser.add_argument('port', help="port", default=1888, nargs="?")
+	args = parser.parse_args()
+
+	client = LightClient()
+
+	loop = asyncio.get_event_loop()
+
+	client.connectTo(args.address, args.port)
+	
+	leds = lights.LightArray2(args.numLeds, client, fps=args.fps)
+	leds.clear()
+
+	if args.chase:
+		loop.create_task(chaser())
+	elif args.rainbow:
+		loop.create_task(rainbow())
+	else:
+		loop.create_task(randomRainbowTransforms())
+
+	print("running main loop")
+
+	try:
+		loop.run_forever()
+	except:
+		print("bork")
+		import traceback, sys
+		exc_type, exc_value, exc_traceback = sys.exc_info()
+		traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+		traceback.print_exception(exc_type, exc_value, exc_traceback,
+                      limit=8, file=sys.stdout)
