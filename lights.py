@@ -80,7 +80,7 @@ class BaseAnimation:
 
 	def _do(self, animation):
 		methodCall, args = animation
-		
+
 		if not args:
 			return methodCall()
 		else:
@@ -175,13 +175,13 @@ class LightArray:
 			c.led -= 1
 
 		c.prevColor = self.ledsData[c.led]
-		
+
 		self.changeColor(c.led, c.color)
 		c.step += 1
 
 		return True
 
-	def transformColorTo(self, led, color, time):	
+	def transformColorTo(self, led, color, time):
 		prevColor = self.ledsData[led]
 		steps = [color[0] - prevColor[0], color[1] - prevColor[1], color[2] - prevColor[2]]
 		stepsAbs = [abs(steps[0]), abs(steps[1]), abs(steps[2]), 1]
@@ -210,7 +210,7 @@ class LightArray:
 class LightArray2:
 	ledArraySize = 0
 	ledsData = None
-	needsUpdate = False	
+	needsUpdate = False
 	driver = None
 
 	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
@@ -276,7 +276,7 @@ class LightArray2:
 				c.led -= 1
 
 			c.prevColor = copy.deepcopy(self.ledsData[c.led])
-			self.changeColor(c.led, c.color)		
+			self.changeColor(c.led, c.color)
 
 			yield asyncio.From(asyncio.sleep(delay / 1000.0))
 
@@ -303,19 +303,19 @@ class LightArray2:
 				if color[i] < transform.targetColor[i]:
 					color[i] += 1
 				elif color[i] > transform.targetColor[i]:
-					color[i] -= 1					
+					color[i] -= 1
 			self.ledsData[transform.led] = color
 			self.update()
 
 			yield asyncio.From(asyncio.sleep(delay / 1000.0))
-		
+
 		transform.complete()
-		
+
 
 class Ws2801Driver:
 	spiDev = None
 
-	def __init__(self):
+	def __init__(self, debug=None):
 		import mraa
 		self.spiDev = mraa.Spi(0)
 
@@ -325,7 +325,7 @@ class Ws2801Driver:
 class Apa102Driver:
 	spiDev = None
 
-	def __init__(self, freqs=1000000):
+	def __init__(self, freqs=1000000, debug=None):
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
@@ -348,7 +348,7 @@ class OpenCvDriver:
 	size = 50
 	dimensions = None
 
-	def __init__(self, dimensions):
+	def __init__(self, dimensions, debug=None):
 		self.dimensions = dimensions
 
 	def update(self, ledsData):
@@ -433,7 +433,7 @@ def getDriver(driverName):
 	from lightclient import LightClient
 
 	drivers = {"Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient}
-	
+
 	if driverName in drivers:
 		return drivers[driverName]
 
