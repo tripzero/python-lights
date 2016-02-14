@@ -41,11 +41,40 @@ class LightProtocol:
 	def __init__(self):
 		pass
 
-	def update(self, ledsData):
+	def updateCompress(self, ledsData):
+		index = 0
 
+		while index < len(ledsData):
+			color = ledsData[index]
+			startId = index
+			length = 0
+			for i in ledsData[index:]:
+				if not np.array_equal(color, i):
+					break
+				
+				length += 1
+
+			if length < 4:
+				"""if the length is less than 4, it's not worth the extra bits to send a setSeries"""
+				for i in range(length):
+					self.setColor(startId + i, color)
+			else:
+				self.setSeries(startId, length, color)
+
+			index += length
+
+
+	def update(self, ledsData):
 		if len(ledsData) == 1 or np.unique(ledsData).size == 1:
 			self.setAllColor(ledsData[0])
 			return
+
+		stdDev = np.std(ledsData)
+
+		"""if stdDev < len(ledsData) / 4:
+			" if there's a lot of common data, we can compress the stream and break up the packets "
+			return self.updateCompress(ledsData)
+		"""
 
 		if self.ledsDataCopy is None:
 			self.ledsDataCopy = np.array(ledsData, copy=True)
@@ -62,7 +91,7 @@ class LightProtocol:
 				#self.setColor(i, ledsData[i])
 				
 		if not len(ledsToChange):
-			print("no change")
+			#print("no change")
 			return
 
 		header = bytearray()
@@ -94,6 +123,24 @@ class LightProtocol:
 		buff = header + light
 		self.send(buff)
 
+	def setSeries(self, startId, length, color):
+		"""
+		Command 0x07
+		sets all lights in the series starting from "startId" to "endId" to "color"
+
+		Data:
+		[0x07][startId][length][r][g][b]		
+		"""
+
+		buff = bytearray()
+		buff.append(0x07)
+		buff.extend(struct.pack('<H', startId))
+		buff.extend(struct.pack('<H', length))
+		buff.extend(color)
+
+		self.send(buff)
+
+
 	def setAllColor(self, color):
 		"""
 		Command: 0x06
@@ -112,6 +159,18 @@ class LightProtocol:
 		buff = header + light
 		self.send(buff)
 
+	def clear(self):
+		"""
+		Command: 0x03
+		clear all leds
+
+		Data:
+		[Command]
+		"""
+		header = bytearray()
+		header.append(0x03)
+
+		self.send(header)
 
 	def setNumLeds(self, numLeds):
 		buff = bytearray()
@@ -157,12 +216,16 @@ class LightClient(LightProtocol):
 	reader = None
 	writer = None
 
-	def __init__(self, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None):
+	# set to true if you are not using the asyncio event loop
+	usingAsynioEventLoop = True
+
+	def __init__(self, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, usingAsynioEventLoop=True):
 		LightProtocol.__init__(self)
 		self.loop = loop
 		self.debug = debug
 		self.onConnected = onConnected
 		self.onDisconnected = onDisconnected
+		self.usingAsynioEventLoop = usingAsynioEventLoop
 		if self.debug:
 			self.log = open("lightclient.log", "w")
 
@@ -183,7 +246,7 @@ class LightClient(LightProtocol):
 			print("connection failed!")
 			self.connected = False
 			self._onDisconnected()
-			return False
+		return False
 
 	def send(self, msg):
 
@@ -191,7 +254,7 @@ class LightClient(LightProtocol):
 			return
 
 		if self.debug:
-			self.log.write(msg)
+			self.log.write("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
 
 		#write header:
 
@@ -200,15 +263,27 @@ class LightClient(LightProtocol):
 
 		msg = header + msg
 
-		#print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
-
-		#@asyncio.coroutine
-		def s():
+		@asyncio.coroutine
+		def s2():
 			try:
 				#print("writing for realz")
 				self.writer.write(msg)
+				yield asyncio.From (self.writer.drain())
+			except TimeoutError:
+				self.connected = False
+				self._onDisconnected()
+			except:
+				import traceback, sys
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+				traceback.print_exception(exc_type, exc_value, exc_traceback,
+		                      limit=8, file=sys.stdout)
+
+		def s():
+			try:
+				self.writer.write(msg)
 				self.writer.drain()
-				#yield asyncio.From (self.writer.drain())
+			
 			except TimeoutError:
 				self.connected = False
 				self._onDisconnected()
@@ -219,8 +294,10 @@ class LightClient(LightProtocol):
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
 		                      limit=8, file=sys.stdout)
 		
-		s()
-		#self.loop.create_task(s())
+		if self.usingAsynioEventLoop:
+			s()
+		else:
+			self.loop.run_until_complete(s2())
 		
 	def _onConnected(self):
 		if self.onConnected:
