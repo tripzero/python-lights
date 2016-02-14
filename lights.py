@@ -35,8 +35,6 @@ class Promise:
 			self.childPromise.call()
 		"""
 
-		return False
-
 class Chase(Id):
 	steps = 0
 	step = 0
@@ -304,10 +302,8 @@ class LightArray2:
 			for i in range(3):
 				if color[i] < transform.targetColor[i]:
 					color[i] += 1
-					stillTransforming = True
 				elif color[i] > transform.targetColor[i]:
-					color[i] -= 1
-					stillTransforming = True
+					color[i] -= 1					
 			self.ledsData[transform.led] = color
 			self.update()
 
@@ -434,7 +430,10 @@ class OpenCvDriver:
 
 
 def getDriver(driverName):
-	drivers = {"Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver}
+	from lightclient import LightClient
+
+	drivers = {"Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient}
+	
 	if driverName in drivers:
 		return drivers[driverName]
 
