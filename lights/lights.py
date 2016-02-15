@@ -430,7 +430,10 @@ class OpenCvDriver:
 
 
 def getDriver(driverName):
-	from lightclient import LightClient
+	try:
+		from lights.lightclient import LightClient
+	except ImportError:
+		from lightclient import LightClient
 
 	drivers = {"Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient}
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import lights
-from lightclient import LightClient
+from lights.lightclient import LightClient
 import random
 import trollius as asyncio
 

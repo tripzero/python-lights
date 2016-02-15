@@ -1,2 +1,2 @@
-import lightclient
-from lights import *
+from .lightclient import *
+from .lights import *
