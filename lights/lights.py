@@ -207,28 +207,21 @@ class LightArray:
 			transform.complete()
 		return stillTransforming
 
-class LightArray2:
-	ledArraySize = 0
-	ledsData = None
-	needsUpdate = False
-	driver = None
+class LightFpsController:
 
-	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
-		self.loop = loop
-		self.setLedArraySize(ledArraySize)
+
+	def __init__(self, driver, fps=30, loop=asyncio.get_event_loop()):
 		self.driver = driver
+		self.loop = loop
 		self.fps = fps
+		self.needsUpdate = False
 		self.loop.create_task(self._doUpdate())
 
-	def setLedArraySize(self, ledArraySize):
-		self.ledArraySize = ledArraySize
-		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
 
-	def clear(self):
-		self.ledsData[:] = (0,0,0)
-		self.update()
+	def update(self, data=None):
+		if data is not None:
+			self.ledsData = data
 
-	def update(self):
 		self.needsUpdate = True
 
 	@asyncio.coroutine
@@ -247,6 +240,23 @@ class LightArray2:
 	                          limit=8, file=sys.stdout)
 			yield asyncio.From(asyncio.sleep(1.0 / self.fps))
 
+class LightArray2(LightFpsController):
+	ledArraySize = 0
+	ledsData = None
+	needsUpdate = False
+	driver = None
+
+	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
+		LightFpsController.__init__(self, driver, fps, loop)
+		self.setLedArraySize(ledArraySize)
+		
+	def setLedArraySize(self, ledArraySize):
+		self.ledArraySize = ledArraySize
+		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
+
+	def clear(self):
+		self.ledsData[:] = (0,0,0)
+		self.update()
 
 	def changeColor(self, ledNumber, color):
 		self.ledsData[ledNumber] = color

@@ -101,6 +101,7 @@ class LightProtocol:
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
+		print ("sending {} update".format(len(ledsToChange)))
 		self.send(ledsToChange)
 
 	def setColor(self, id, color):
