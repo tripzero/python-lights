@@ -13,13 +13,14 @@ Operating System :: Unix
 Operating System :: POSIX :: Linux
 """
 
-setup(name='lights',
+setup(name='photons',
       version='1.0',
       description='Python Light module for working with color LEDs',
       author='Kevron Rees',
       author_email='tripzero.kev@gmail.com',
-      url='https://github.com/tripzero/python-lights',
-      packages=["lights"],
+      url='https://github.com/tripzero/python-photons',
+      packages=["photons"],
       install_requires=["trollius"],
+      license="LGPL Version 2.0",
       classifiers = filter(None, classifiers.split("\n"))
       )

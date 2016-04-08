@@ -277,6 +277,7 @@ if __name__ == "__main__":
 	parser.add_argument('--driver', dest="driver", help="driver to use", default="Apa102")
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
+	parser.add_argument('--device', type=str, dest="device_name", default="", help="particle device name")
 	args = parser.parse_args()
 
 	loop = asyncio.get_event_loop()
@@ -285,12 +286,21 @@ if __name__ == "__main__":
 	driver = Driver(debug=args.debug)
 
 
+	if args.device_name:
+                import spyrk
+		import json
+		with open('config.json','r') as f:
+			key = json.loads(f.read())['particleKey']
+                s = spyrk.SparkCloud(key)
+                args.address = s.devices[args.device_name].ip
+                print (args.address)
+
 	if args.driver == "LightProtocol":
 		driver.connectTo(args.address, args.port)
 		driver.setNumLeds(args.numLeds)
-	
+
 	leds = lights.LightArray2(args.numLeds, driver, fps=args.fps)
-	
+
 	leds.clear()
 
 	if args.chase:
