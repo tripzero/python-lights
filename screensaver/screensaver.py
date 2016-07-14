@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
-import lights
-from lights.lightclient import LightClient
+import photons
+from photons.lightclient import LightClient
 import random
 import trollius as asyncio
 
@@ -230,7 +230,7 @@ def chaser():
 	loop = asyncio.get_event_loop()
 
 	leds.clear()
-	animation = lights.SequentialAnimation()
+	animation = photons.SequentialAnimation()
 
 	delay = 50
 	time = leds.ledArraySize * delay
@@ -250,7 +250,7 @@ def randomRainbowTransforms():
 	print( "rainbow...")
 	loop = asyncio.get_event_loop()
 
-	concurrentTransform = lights.ConcurrentAnimation()
+	concurrentTransform = photons.ConcurrentAnimation()
 
 	r = random.randint(0, 255)
 	g = random.randint(0, 255)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 	import argparse
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--debug', dest="debug", help="turn on debugging.", action='store_true')
-	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int)
+	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int, default=1)
 	parser.add_argument('--fps', dest="fps", help="frames per second", type=int, default=5)
 	parser.add_argument('--chase', dest="chase", help="do chase animation in a loop", action='store_true')
 	parser.add_argument('--larson', dest="larson", help="do larson animation in a loop", action='store_true')
@@ -282,24 +282,25 @@ if __name__ == "__main__":
 
 	loop = asyncio.get_event_loop()
 
-	Driver = lights.getDriver(args.driver)
+	Driver = photons.getDriver(args.driver)
 	driver = Driver(debug=args.debug)
 
 
 	if args.device_name:
-                import spyrk
+		import spyrk
 		import json
 		with open('config.json','r') as f:
 			key = json.loads(f.read())['particleKey']
-                s = spyrk.SparkCloud(key)
-                args.address = s.devices[args.device_name].ip
-                print (args.address)
+			s = spyrk.SparkCloud(key)
+			args.address = s.devices[args.device_name].ip
+			args.numLeds = s.devices[args.device_name].numLights
+			print (args.address)
 
 	if args.driver == "LightProtocol":
 		driver.connectTo(args.address, args.port)
 		driver.setNumLeds(args.numLeds)
 
-	leds = lights.LightArray2(args.numLeds, driver, fps=args.fps)
+	leds = photons.LightArray2(args.numLeds, driver, fps=args.fps)
 
 	leds.clear()
 
