@@ -296,6 +296,10 @@ if __name__ == "__main__":
 	if args.driver:
 		driver_name = args.driver
 		Driver = photons.getDriver(args.driver)
+
+	if not Driver:
+		raise Exception("failed to load driver: {}".format(args.driver))
+
 		driver = Driver(debug=args.debug)
 
 	elif "driver" in config.keys():
