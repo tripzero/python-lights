@@ -267,6 +267,8 @@ def pickRandomAnimation():
 
 if __name__ == "__main__":
 	import argparse
+	import json
+
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--debug', dest="debug", help="turn on debugging.", action='store_true')
 	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int, default=1)
@@ -274,7 +276,7 @@ if __name__ == "__main__":
 	parser.add_argument('--chase', dest="chase", help="do chase animation in a loop", action='store_true')
 	parser.add_argument('--larson', dest="larson", help="do larson animation in a loop", action='store_true')
 	parser.add_argument('--rainbow', dest="rainbow", help="do rainbow wave animation in a loop", action='store_true')
-	parser.add_argument('--driver', dest="driver", help="driver to use", default="Apa102")
+	parser.add_argument('--driver', dest="driver", help="driver to use", default=None)
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	parser.add_argument('--device', type=str, dest="device_name", default="", help="particle device name")
@@ -282,21 +284,51 @@ if __name__ == "__main__":
 
 	loop = asyncio.get_event_loop()
 
-	Driver = photons.getDriver(args.driver)
-	driver = Driver(debug=args.debug)
+	config = None
+
+	with open('config.json','r') as f:
+		config = json.loads(f.read())
+
+	Driver = None
+	driver = None
+	driver_name = None
+
+	if args.driver:
+		driver_name = args.driver
+		Driver = photons.getDriver(args.driver)
+		driver = Driver(debug=args.debug)
+
+	elif "driver" in config.keys():
+		driver_name = config['driver']
+		Driver = photons.getDriver(driver_name)
+		if not Driver:
+			raise Exception("{} driver not available.  Installed drivers: {}".format(config['driver'], ", ".join(photons.drivers)))
+
+		driver = Driver(debug=args.debug)
+
+	else:
+		raise Exception("No driver specified in config or arguments (--driver)")
 
 
 	if args.device_name:
 		import spyrk
-		import json
-		with open('config.json','r') as f:
-			key = json.loads(f.read())['particleKey']
-			s = spyrk.SparkCloud(key)
-			args.address = s.devices[args.device_name].ip
-			args.numLeds = s.devices[args.device_name].numLights
-			print (args.address)
+		
+		key = config['particleKey']
+		
+		s = spyrk.SparkCloud(key)
 
-	if args.driver == "LightProtocol":
+		if "particleApiServer" in config.keys():
+			apiServer = config["particleApiServer"]
+			from hammock import Hammock
+			s = spyrk.SparkCloud(key, spark_api=Hammock(apiServer))
+		
+		print("trying to get ip address and numLights from particle server...")
+
+		args.address = s.devices[args.device_name].ip
+		args.numLeds = s.devices[args.device_name].numLights
+		print (args.address)
+
+	if driver_name == "LightProtocol":
 		driver.connectTo(args.address, args.port)
 		driver.setNumLeds(args.numLeds)
 

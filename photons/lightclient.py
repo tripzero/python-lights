@@ -5,6 +5,7 @@ import trollius as asyncio
 import numpy as np
 import struct
 import binascii
+from wss.wssclient import ReconnectAsyncio
 
 #log.startLogging(sys.stdout)
 
@@ -101,7 +102,7 @@ class LightProtocol:
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
-		print ("sending {} update".format(len(ledsToChange)))
+		#print ("sending {} update".format(len(ledsToChange)))
 		self.send(ledsToChange)
 
 	def setColor(self, id, color):
@@ -210,44 +211,36 @@ class LightProtocol:
 			light += 5 #5 bytes per light
 
 
-class LightClient(LightProtocol):
-	debug = False
-	onDisconnected = None
-	onConnected = None
-	reader = None
-	writer = None
-
-	# set to true if you are not using the asyncio event loop
-	usingAsynioEventLoop = True
+class LightClient(LightProtocol, ReconnectAsyncio):
+	
 
 	def __init__(self, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, usingAsynioEventLoop=True):
 		LightProtocol.__init__(self)
+		ReconnectAsyncio.__init__(self, retry=True)
+		self.reader = None
+		self.writer = None
 		self.loop = loop
 		self.debug = debug
+		self.connected = False
+
 		self.onConnected = onConnected
 		self.onDisconnected = onDisconnected
 		self.usingAsynioEventLoop = usingAsynioEventLoop
 		if self.debug:
 			self.log = open("lightclient.log", "w")
 
+	@asyncio.coroutine
+	def _connect(self):
+		self.reader, self.writer = yield asyncio.From(asyncio.open_connection(self.addy, self.port))
+		self.connected=True
+
 	def connectTo(self, addy, port):
 		self.addy = addy
 		self.port = port
 
-		@asyncio.coroutine
-		def c():
-			self.reader, self.writer = yield asyncio.From(asyncio.open_connection(addy, port))
+		print("trying to connect to {}:{}".format(addy, port))
 
-		try:
-			self.loop.run_until_complete(c())
-			self.connected = True
-			self._onConnected()
-			return True
-		except:
-			print("connection failed!")
-			self.connected = False
-			self._onDisconnected()
-		return False
+		self._do_connect()
 
 	def send(self, msg):
 
