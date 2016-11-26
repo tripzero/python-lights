@@ -233,6 +233,8 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 	def _connect(self):
 		self.reader, self.writer = yield asyncio.From(asyncio.open_connection(self.addy, self.port))
 		self.connected=True
+		if self.onConnected:
+			self.onConnected()
 
 	def connectTo(self, addy, port):
 		self.addy = addy

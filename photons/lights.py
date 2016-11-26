@@ -308,7 +308,7 @@ class LightArray2(LightFpsController):
 	def _doTransformColorTo(self, transform, maxSteps, delay):
 		color = self.ledsData[transform.led]
 
-		for i in range(maxSteps):
+		for i in range(int(maxSteps)):
 			for i in range(3):
 				if color[i] < transform.targetColor[i]:
 					color[i] += 1
