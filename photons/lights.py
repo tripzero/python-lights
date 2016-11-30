@@ -81,6 +81,9 @@ class BaseAnimation:
 	def _do(self, animation):
 		methodCall, args = animation
 
+		if not methodCall:
+			raise Exception("animation is not a method")
+
 		if not args:
 			return methodCall()
 		else:
@@ -113,9 +116,20 @@ class ConcurrentAnimation(BaseAnimation):
 		return self.promise
 
 	def _animationComplete(self, animation):
-		self.animations.remove(animation)
 		if len(self.animations) == 0:
 			self.promise.call()
+		else:
+			self.removearray(self.animations, animation)
+
+	def removearray(self, L, arr):
+		ind = 0
+    		size = len(L)
+		while ind < size and not np.array_equal(L[ind],arr):
+			ind += 1
+			if ind != size:
+				L.pop(ind)
+				return
+
 
 class LightArray:
 	ledArraySize = 0
@@ -249,7 +263,7 @@ class LightArray2(LightFpsController):
 	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
 		LightFpsController.__init__(self, driver, fps, loop)
 		self.setLedArraySize(ledArraySize)
-		
+
 	def setLedArraySize(self, ledArraySize):
 		self.ledArraySize = ledArraySize
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
@@ -289,8 +303,6 @@ class LightArray2(LightFpsController):
 			self.changeColor(c.led, c.color)
 
 			yield asyncio.From(asyncio.sleep(delay / 1000.0))
-
-		print("_doChase done!")
 
 		c.complete()
 
@@ -358,8 +370,8 @@ class OpenCvDriver:
 	size = 50
 	dimensions = None
 
-	def __init__(self, dimensions, debug=None):
-		self.dimensions = dimensions
+	def __init__(self, debug=None):
+		self.dimensions = (1, 1, 0, 0)
 
 	def update(self, ledsData):
 		import cv2
@@ -449,5 +461,11 @@ def getDriver(driverName):
 
 	if driverName in drivers:
 		return drivers[driverName]
+
+	print("driver {} not supported")
+	print("supported drivers:")
+
+	for driver in drivers.keys():
+		print("\t{}".format(driver))
 
 	return None

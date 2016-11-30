@@ -66,7 +66,7 @@ def wavelengthToRGB(wavelength):
 	    factor = 0.0
 
 	# Don't want 0^x = 1 for x != 0
-	
+
 	r = int(round(intensityMax * pow(r * factor, gamma)))
 	g = int(round(intensityMax * pow(g * factor, gamma)))
 	b = int(round(intensityMax * pow(b * factor, gamma)))
@@ -93,14 +93,14 @@ def rainbow():
 
 	offset = 0
 
-	while True:			
+	while True:
 		if offset > leds.ledArraySize:
 			offset = 0
 
 		x = offset
 
 		for led in range(leds.ledArraySize):
-			
+
 			if x >= leds.ledArraySize:
 				x = 0
 
@@ -138,7 +138,7 @@ def larsonScanner():
 			if led + length > side1:
 				direction = "backwards"
 				continue
-			
+
 			if led < 0:
 				direction = "forward"
 				continue
@@ -149,7 +149,7 @@ def larsonScanner():
 			if led2 - length < side1:
 				direction2 = "backwards"
 				break
-			
+
 			if led2 >= leds.ledArraySize:
 				direction2 = "forward"
 				break
@@ -160,7 +160,7 @@ def larsonScanner():
 			led += 1
 		else:
 			led -= 1
-			
+
 		if direction2 == "forward":
 			led2 -= 1
 		else:
@@ -191,7 +191,7 @@ def larsonScanner2():
 			if led + length > side1:
 				direction = "backwards"
 				continue
-			
+
 			if led < 0:
 				direction = "forward"
 				continue
@@ -202,7 +202,7 @@ def larsonScanner2():
 			if led2 - length < side1:
 				direction2 = "backwards"
 				break
-			
+
 			if led2 >= leds.ledArraySize:
 				direction2 = "forward"
 				break
@@ -213,7 +213,7 @@ def larsonScanner2():
 			led += 1
 		else:
 			led -= 1
-			
+
 		if direction2 == "forward":
 			led2 -= 1
 		else:
@@ -280,13 +280,14 @@ if __name__ == "__main__":
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	parser.add_argument('--device', type=str, dest="device_name", default="", help="particle device name")
+	parser.add_argument('--config', type=str, dest="config_name", default="config.json", help="config")
 	args = parser.parse_args()
 
 	loop = asyncio.get_event_loop()
 
 	config = None
 
-	with open('config.json','r') as f:
+	with open(args.config_name,'r') as f:
 		config = json.loads(f.read())
 
 	Driver = None
@@ -312,16 +313,16 @@ if __name__ == "__main__":
 
 	if args.device_name:
 		import spyrk
-		
+
 		key = config['particleKey']
-		
+
 		s = spyrk.SparkCloud(key)
 
 		if "particleApiServer" in config.keys():
 			apiServer = config["particleApiServer"]
 			from hammock import Hammock
 			s = spyrk.SparkCloud(key, spark_api=Hammock(apiServer))
-		
+
 		print("trying to get ip address and numLights from particle server...")
 
 		args.address = s.devices[args.device_name].ip
