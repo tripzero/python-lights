@@ -66,6 +66,12 @@ class TransformToColor(Id):
 	def complete(self):
 		self.promise.call()
 
+class AnimationFunc:
+
+	def __init__(self, func, args):
+		self.func = func
+		self.args = args
+
 class BaseAnimation:
 	animations = []
 	promise = None
@@ -76,10 +82,15 @@ class BaseAnimation:
 	def addAnimation(self, animation, *args):
 		if len(args) == 0:
 			args = None
-		self.animations.append((animation, args))
+
+		self.animations.append(AnimationFunc(animation, args))
 
 	def _do(self, animation):
-		methodCall, args = animation
+		methodCall = animation.func
+		args = animation.args
+
+		if not methodCall:
+			raise Exception("animation is not a method")
 
 		if not args:
 			return methodCall()
@@ -110,12 +121,15 @@ class ConcurrentAnimation(BaseAnimation):
 	def start(self):
 		for animation in self.animations:
 			self._do(animation).then(self._animationComplete, animation)
+
 		return self.promise
 
 	def _animationComplete(self, animation):
 		self.animations.remove(animation)
+
 		if len(self.animations) == 0:
 			self.promise.call()
+		
 
 class LightArray:
 	ledArraySize = 0
@@ -249,7 +263,7 @@ class LightArray2(LightFpsController):
 	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
 		LightFpsController.__init__(self, driver, fps, loop)
 		self.setLedArraySize(ledArraySize)
-		
+
 	def setLedArraySize(self, ledArraySize):
 		self.ledArraySize = ledArraySize
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
@@ -289,8 +303,6 @@ class LightArray2(LightFpsController):
 			self.changeColor(c.led, c.color)
 
 			yield asyncio.From(asyncio.sleep(delay / 1000.0))
-
-		print("_doChase done!")
 
 		c.complete()
 
@@ -353,13 +365,40 @@ class Apa102Driver:
 
 		self.spiDev.write(data)
 
+
+class OpenCvSimpleDriver:
+	
+
+	def __init__(self, debug=None):
+		self.debug=debug
+		self.image = None
+		self.size = 50
+
+	def update(self, ledsData):
+		import cv2
+
+		width = len(ledsData) * self.size
+		height = self.size
+
+		if self.image == None:
+			self.image = np.zeros((height, width, 3), np.uint8)
+
+		x=0
+		for color in ledsData:
+			self.image[height - self.size : height, x : x + self.size] = color
+			x+=self.size
+
+		cv2.imshow("output", self.image)
+		cv2.waitKey(1)
+
+
 class OpenCvDriver:
 	image = None
 	size = 50
 	dimensions = None
 
-	def __init__(self, dimensions, debug=None):
-		self.dimensions = dimensions
+	def __init__(self, debug=None):
+		self.dimensions = (1, 1, 0, 0)
 
 	def update(self, ledsData):
 		import cv2
@@ -445,9 +484,16 @@ def getDriver(driverName):
 	except ImportError:
 		from lightclient import LightClient
 
-	drivers = {"Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient}
+	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient, 
+				"OpenCVSimple" : OpenCvSimpleDriver }
 
 	if driverName in drivers:
 		return drivers[driverName]
+
+	print("driver {} not supported")
+	print("supported drivers:")
+
+	for driver in drivers.keys():
+		print("\t{}".format(driver))
 
 	return None
