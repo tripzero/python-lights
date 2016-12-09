@@ -229,7 +229,7 @@ class LightFpsController:
 		self.loop = loop
 		self.fps = fps
 		self.needsUpdate = False
-		self.loop.create_task(self._doUpdate())
+		self.loop.create_task(self._updateLoop())
 
 
 	def update(self, data=None):
@@ -238,12 +238,15 @@ class LightFpsController:
 
 		self.needsUpdate = True
 
+	def updateNow(self):
+		self.driver.update(self.ledsData)
+
 	@asyncio.coroutine
-	def _doUpdate(self):
+	def _updateLoop(self):
 		while True:
 			try:
 				if self.needsUpdate == True:
-					self.driver.update(self.ledsData)
+					self.updateNow()
 					self.needsUpdate = False
 			except:
 				print("bork in _doUpdate")
@@ -276,35 +279,14 @@ class LightArray2(LightFpsController):
 		self.ledsData[ledNumber] = color
 		self.update()
 
-	def chase(self, color, time, delay):
-		steps = int(time / delay)
-		c = Chase(color, steps)
-		self.loop.create_task(self._doChase(c, delay, steps))
-		return c.promise
-
-	@asyncio.coroutine
-	def _doChase(self, c, delay, steps):
-
-		for i in range(steps):
-
-			if c.led+1 >= self.ledArraySize:
-				c.forward = False
-			if c.led-1 <= 0:
-				c.forward = True
-			#restore previous led color
-			self.changeColor(c.led, c.prevColor)
-
-			if c.forward == True:
-				c.led += 1
-			else:
-				c.led -= 1
-
-			c.prevColor = copy.deepcopy(self.ledsData[c.led])
-			self.changeColor(c.led, c.color)
-
-			yield asyncio.From(asyncio.sleep(delay / 1000.0))
-
-		c.complete()
+	def pushFront(self, colors):
+		if isinstance(colors[0], list):
+			l = len(colors)
+			lm = -1 * l
+			self.ledsData[l:] = self.ledsData[:lm]
+			self.ledsData[0:l] = colors
+		else:
+			self.pushFront([colors])
 
 	def transformColorTo(self, led, color, time):
 		prevColor = self.ledsData[led]
@@ -478,7 +460,7 @@ class OpenCvDriver:
 
 
 
-def getDriver(driverName):
+def getDriver(driverName = None):
 	try:
 		from lights.lightclient import LightClient
 	except ImportError:
@@ -487,10 +469,10 @@ def getDriver(driverName):
 	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient, 
 				"OpenCVSimple" : OpenCvSimpleDriver }
 
-	if driverName in drivers:
+	if driverName and driverName in drivers:
 		return drivers[driverName]
 
-	print("driver {} not supported")
+	print("driver {} not supported".format(driverName))
 	print("supported drivers:")
 
 	for driver in drivers.keys():
