@@ -302,10 +302,8 @@ if __name__ == "__main__":
 		driver_name = args.driver
 		Driver = photons.getDriver(args.driver)
 
-	if not Driver:
-		raise Exception("failed to load driver: {}".format(args.driver))
-
-		driver = Driver(debug=args.debug)
+		if not Driver:
+			raise Exception("failed to load driver: {}".format(args.driver))
 
 	elif "driver" in config.keys():
 		driver_name = config['driver']
@@ -313,7 +311,7 @@ if __name__ == "__main__":
 		if not Driver:
 			raise Exception("{} driver not available.  Installed drivers: {}".format(config['driver'], ", ".join(photons.drivers)))
 
-		driver = Driver(debug=args.debug)
+	driver = Driver(debug=args.debug)
 
 	else:
 		raise Exception("No driver specified in config or arguments (--driver)")
