@@ -287,8 +287,12 @@ if __name__ == "__main__":
 
 	config = None
 
-	with open(args.config_name,'r') as f:
-		config = json.loads(f.read())
+	try:
+		with open(args.config_name,'r') as f:
+			config = json.loads(f.read())
+	except:
+		print("not using config.json.  Not found or bad json")
+		pass
 
 	Driver = None
 	driver = None
