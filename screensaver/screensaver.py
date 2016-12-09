@@ -311,11 +311,10 @@ if __name__ == "__main__":
 		if not Driver:
 			raise Exception("{} driver not available.  Installed drivers: {}".format(config['driver'], ", ".join(photons.drivers)))
 
-	driver = Driver(debug=args.debug)
-
 	else:
 		raise Exception("No driver specified in config or arguments (--driver)")
 
+	driver = Driver(debug=args.debug)
 
 	if args.device_name:
 		import spyrk
