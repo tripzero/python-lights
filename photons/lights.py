@@ -333,12 +333,17 @@ class Apa102Driver:
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
+		self.brightness = 0xff
+
+	def setGlobalBrightness(self, brightness):
+		if brightness >= 0 and brightness <= 255:
+			self.brightness = brightness
 
 	def update(self, ledsData):
 		data = bytearray()
 		data[:4] = [0x00, 0x00, 0x00, 0x00]
 		for rgb in ledsData:
-			data.append(0xff)
+			data.append(self.brightness)
 			# apa102 is GBR because THINGS
 			data.extend([rgb[1], rgb[2], rgb[0]])
 
