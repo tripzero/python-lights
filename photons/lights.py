@@ -280,7 +280,7 @@ class LightArray2(LightFpsController):
 		self.update()
 
 	def pushFront(self, colors):
-		if isinstance(colors[0], list):
+		if isinstance(colors[0], tuple):
 			l = len(colors)
 			lm = -1 * l
 			self.ledsData[l:] = self.ledsData[:lm]
