@@ -223,28 +223,6 @@ def larsonScanner2():
 		yield asyncio.From(asyncio.sleep(delay))
 
 
-
-@asyncio.coroutine
-def chaser():
-	print ("doing chaser...")
-	loop = asyncio.get_event_loop()
-
-	leds.clear()
-	animation = photons.SequentialAnimation()
-
-	delay = 50
-	time = leds.ledArraySize * delay
-
-	r = random.randint(0, 255)
-	g = random.randint(0, 255)
-	b = random.randint(0, 255)
-
-	print ("chase color: ", r, g, b)
-
-	animation.addAnimation(leds.chase, (r, g, b), time, delay)
-
-	animation.start().then(loop.create_task, chaser())
-
 @asyncio.coroutine
 def randomRainbowTransforms():
 	print( "rainbow...")
@@ -273,7 +251,6 @@ if __name__ == "__main__":
 	parser.add_argument('--debug', dest="debug", help="turn on debugging.", action='store_true')
 	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int, default=1)
 	parser.add_argument('--fps', dest="fps", help="frames per second", type=int, default=5)
-	parser.add_argument('--chase', dest="chase", help="do chase animation in a loop", action='store_true')
 	parser.add_argument('--larson', dest="larson", help="do larson animation in a loop", action='store_true')
 	parser.add_argument('--rainbow', dest="rainbow", help="do rainbow wave animation in a loop", action='store_true')
 	parser.add_argument('--driver', dest="driver", help="driver to use", default=None)
@@ -342,9 +319,7 @@ if __name__ == "__main__":
 
 	leds.clear()
 
-	if args.chase:
-		loop.create_task(chaser())
-	elif args.rainbow:
+	if args.rainbow:
 		loop.create_task(rainbow())
 	elif args.larson:
 		loop.create_task(larsonScanner())

@@ -39,7 +39,9 @@ class LightProtocol:
 	"""
 	ledsDataCopy = None
 	
-	def __init__(self):
+	def __init__(self, leds=None):
+		"""leds = LightArray2 handle.  This is only used when trying to parse."""
+		self.leds=leds
 		pass
 
 	def updateCompress(self, ledsData):
@@ -210,6 +212,25 @@ class LightProtocol:
 			print("change light id {0} to ({1},{2},{3})".format(id, r, g, b))
 			light += 5 #5 bytes per light
 
+	@LightParser.command(0x03)
+	def parseClear(self, msg):
+		self.leds.clear()
+
+	@LightParser.command(0x02)
+	def parseSetNumLeds(self, msg):
+		pass
+
+	@LightParser.command(0x06)
+	def parseSetAllLeds(self, msg):
+		pass
+
+	@LightParser.command(0x07)
+	def parseSetSeries(self, msg):
+		pass
+
+	@LightParser.command(0x05)
+	def parseSetDebug(self, msg):
+		pass
 
 class LightClient(LightProtocol, ReconnectAsyncio):
 	

@@ -288,6 +288,21 @@ class LightArray2(LightFpsController):
 		else:
 			self.pushFront([colors])
 
+			self.update()
+
+	def pushBack(self, colors):
+		if isinstance(colors[0], tuple):
+			l = len(colors)
+			lm = -1 * l
+			end = len(self.ledsData) - l
+			self.ledsData[:lm] = self.ledsData[l:]
+			self.ledsData[lm:] = colors
+		else:
+			self.pushBack([colors])
+
+			self.update()
+
+
 	def transformColorTo(self, led, color, time):
 		prevColor = self.ledsData[led]
 		steps = [color[0] - prevColor[0], color[1] - prevColor[1], color[2] - prevColor[2]]
