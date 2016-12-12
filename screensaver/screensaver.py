@@ -233,6 +233,7 @@ def randomRainbowTransforms():
 	r = random.randint(0, 255)
 	g = random.randint(0, 255)
 	b = random.randint(0, 255)
+	print("color = {}".format((r,g,b)))
 	for i in range(leds.ledArraySize):
 		concurrentTransform.addAnimation(leds.transformColorTo, i, (r,g,b), 1000)
 

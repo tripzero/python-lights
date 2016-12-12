@@ -305,28 +305,36 @@ class LightArray2(LightFpsController):
 
 	def transformColorTo(self, led, color, time):
 		prevColor = self.ledsData[led]
-		steps = [color[0] - prevColor[0], color[1] - prevColor[1], color[2] - prevColor[2]]
-		stepsAbs = [abs(steps[0]), abs(steps[1]), abs(steps[2]), 1]
-		maxSteps = max(stepsAbs)
-		delay = time / maxSteps
+		redSteps = abs(prevColor[0] - color[0])
+		greenSteps = abs(prevColor[1] - color[1])
+		blueSteps = abs(prevColor[2] - color[2])
+		numFrames = int(self.fps * (time / 1000.0))
+
+		redSteps = redSteps / numFrames
+		blueSteps = redSteps / numFrames
+		greenSteps = redSteps / numFrames
+
 		t = TransformToColor(led, color)
-		self.loop.create_task(self._doTransformColorTo(t, maxSteps, delay))
+		self.loop.create_task(self._doTransformColorTo(t, redSteps, greenSteps, blueSteps, numFrames))
 		return t.promise
 
 	@asyncio.coroutine
-	def _doTransformColorTo(self, transform, maxSteps, delay):
+	def _doTransformColorTo(self, transform, redSteps, greenSteps, blueSteps, numFrames):
 		color = self.ledsData[transform.led]
 
-		for i in range(int(maxSteps)):
-			for i in range(3):
-				if color[i] < transform.targetColor[i]:
-					color[i] += 1
-				elif color[i] > transform.targetColor[i]:
-					color[i] -= 1
+		steps = [redSteps, greenSteps, blueSteps]
+
+		for i in range(numFrames):
+			for c in range(3):
+				if color[c] < transform.targetColor[c]:
+					color[c] += steps[c]
+				elif color[c] > transform.targetColor[c]:
+					color[c] -= steps[c]
+
 			self.ledsData[transform.led] = color
 			self.update()
 
-			yield asyncio.From(asyncio.sleep(delay / 1000.0))
+			yield asyncio.From(asyncio.sleep(1.0/self.fps))
 
 		transform.complete()
 
