@@ -311,8 +311,8 @@ class LightArray2(LightFpsController):
 		numFrames = int(self.fps * (time / 1000.0))
 
 		redSteps = redSteps / numFrames
-		blueSteps = redSteps / numFrames
-		greenSteps = redSteps / numFrames
+		blueSteps = blueSteps / numFrames
+		greenSteps = greenSteps / numFrames
 
 		t = TransformToColor(led, color)
 		self.loop.create_task(self._doTransformColorTo(t, redSteps, greenSteps, blueSteps, numFrames))
