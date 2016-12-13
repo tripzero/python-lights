@@ -324,15 +324,14 @@ class LightArray2(LightFpsController):
 
 		steps = [redSteps, greenSteps, blueSteps]
 
-		for i in range(numFrames):
-			for c in range(3):
+		for i in xrange(numFrames):
+			for c in xrange(3):
 				if color[c] < transform.targetColor[c]:
 					color[c] += steps[c]
 				elif color[c] > transform.targetColor[c]:
 					color[c] -= steps[c]
 
-			self.ledsData[transform.led] = color
-			self.update()
+			self.changeColor(transform.led, color)
 
 			yield asyncio.From(asyncio.sleep(1.0/self.fps))
 
@@ -486,7 +485,13 @@ class OpenCvDriver:
 
 		cv2.imshow("output", self.image)
 
+class DummyDriver:
 
+	def __init__(self, debug=None):
+		pass
+
+	def update(self, ledsData):
+		pass
 
 def getDriver(driverName = None):
 	try:
@@ -495,7 +500,7 @@ def getDriver(driverName = None):
 		from lightclient import LightClient
 
 	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient, 
-				"OpenCVSimple" : OpenCvSimpleDriver }
+				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver }
 
 	if driverName and driverName in drivers:
 		return drivers[driverName]
