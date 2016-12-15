@@ -239,6 +239,22 @@ def randomRainbowTransforms():
 
 	concurrentTransform.start().then(loop.create_task, randomRainbowTransforms())
 
+@asyncio.coroutine
+def randomRainbowTransforms2():
+	print( "rainbow...")
+	loop = asyncio.get_event_loop()
+
+	concurrentTransform = photons.ColorTransformAnimation(leds)
+
+	r = random.randint(0, 255)
+	g = random.randint(0, 255)
+	b = random.randint(0, 255)
+	print("color = {}".format((r,g,b)))
+	for i in range(leds.ledArraySize):
+		concurrentTransform.addAnimation(i, (r,g,b), 1000)
+
+	concurrentTransform.start().then(loop.create_task, randomRainbowTransforms2())
+
 
 def pickRandomAnimation():
 	animations = [randomRainbowTransforms, chaser]

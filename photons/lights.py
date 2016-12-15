@@ -53,14 +53,35 @@ class Chase(Id):
 	def complete(self):
 		self.promise.call()
 
+class ColorTransform(Id):
+
+	def __init__(self, led, targetColor, startColor, redStep, blueStep, greenStep):
+		Id.__init__(self)
+		self.startColor = startColor
+		self.led = led
+		self.targetColor = targetColor
+		self.redStep = redStep
+		self.greenStep = greenStep
+		self.blueStep = blueStep
+
+		redDirection = targetColor[0] > startColor[0]
+		greenDirection = targetColor[1] > startColor[1]
+		blueDirection = targetColor[2] > startColor[2]
+
+		self.direction = [redDirection, greenDirection, blueDirection]
+		
+		self.promise = Promise()
+
+	def complete(self):
+		self.promise.call()
+
 class TransformToColor(Id):
-	targetColor = [0,0,0]
-	led = 0
-	promise = None
+
 	def __init__(self, led, targetColor):
 		Id.__init__(self)
 		self.led = led
 		self.targetColor = targetColor
+		
 		self.promise = Promise()
 
 	def complete(self):
@@ -130,6 +151,86 @@ class ConcurrentAnimation(BaseAnimation):
 		if len(self.animations) == 0:
 			self.promise.call()
 		
+class ColorTransformAnimation(BaseAnimation):
+	def __init__(self, leds):
+		BaseAnimation.__init__(self)
+		self.leds = leds
+		self.animations = []
+
+	def addAnimation(self, led, color, time):
+		prevColor = self.leds.ledsData[led]
+		redSteps = abs(prevColor[0] - color[0])
+		greenSteps = abs(prevColor[1] - color[1])
+		blueSteps = abs(prevColor[2] - color[2])
+		numFrames = int(self.leds.fps * (time / 1000.0))
+
+		redSteps = redSteps / numFrames
+		blueSteps = blueSteps / numFrames
+		greenSteps = greenSteps / numFrames
+
+		if redSteps == 0:
+			redSteps = 1
+		if blueSteps == 0:
+			blueSteps = 1
+		if greenSteps == 0:
+			greenSteps = 1
+
+		t = ColorTransform(led, color, prevColor, redSteps, blueSteps, greenSteps)
+		self.animations.append(t)
+
+	def start(self):
+		asyncio.get_event_loop().create_task(self._run())
+
+		return self.promise
+
+	@asyncio.coroutine
+	def _run(self):
+		while len(self.animations):
+			#print ("num animations left: {}".format(len(self.animations)))
+			remove_list = []
+			for animation in self.animations:
+				color = self.leds.ledsData[animation.led]
+
+				steps = [animation.redStep, animation.greenStep, animation.blueStep]
+
+				for c in range(3):
+					if animation.direction[c]:
+						color[c] += steps[c]
+					else:
+						color[c] -= steps[c]
+
+					#"overshoot correction"
+					#True means it should be increasing in direction
+					#print("color = {}, target = {}".format(color[c], animation.targetColor[c]))
+					#print("direction = {}".format(animation.direction[c]))
+					#print("step: {}".format(steps[c]))	
+
+					if animation.direction[c] and color[c] > animation.targetColor[c]:
+						#print("corrected")
+						color[c] = animation.targetColor[c]
+					elif not animation.direction[c] and color[c] < animation.targetColor[c]:
+						#print("corrected")
+						color[c] = animation.targetColor[c]
+
+				#print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
+				#print("steps: {}".format(steps))
+				#print("direction = {}".format(animation.direction))
+				self.leds.changeColor(animation.led, color)
+				
+				if np.array_equal(color, animation.targetColor):
+					animation.complete()
+					remove_list.append(animation)
+			
+			#print("remove_list = {}".format(len(remove_list)))
+			for remove in remove_list:
+				self.animations.remove(remove)
+
+			#print("yielding")
+			yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
+
+		self.promise.call()
+
+
 
 class LightArray:
 	ledArraySize = 0
@@ -389,7 +490,7 @@ class OpenCvSimpleDriver:
 		width = len(ledsData) * self.size
 		height = self.size
 
-		if self.image == None:
+		if not isinstance(self.image, list):
 			self.image = np.zeros((height, width, 3), np.uint8)
 
 		x=0
