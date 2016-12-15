@@ -341,7 +341,7 @@ if __name__ == "__main__":
 	elif args.larson:
 		loop.create_task(larsonScanner())
 	else:
-		loop.create_task(randomRainbowTransforms())
+		loop.create_task(randomRainbowTransforms2())
 
 	print("running main loop")
 
