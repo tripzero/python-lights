@@ -57,7 +57,7 @@ class ColorTransform(Id):
 
 	def __init__(self, led, targetColor, startColor, redStep, blueStep, greenStep):
 		Id.__init__(self)
-		self.startColor = startColor
+		self.startColor = (startColor[0], startColor[1], startColor[2])
 		self.led = led
 		self.targetColor = targetColor
 		self.redStep = redStep
@@ -165,15 +165,15 @@ class ColorTransformAnimation(BaseAnimation):
 		numFrames = int(self.leds.fps * (time / 1000.0))
 
 		redSteps = redSteps / numFrames
-		blueSteps = blueSteps / numFrames
 		greenSteps = greenSteps / numFrames
+		blueSteps = blueSteps / numFrames
 
-		if redSteps == 0:
+		if redSteps == 0 and color[0] != prevColor[0]:
 			redSteps = 1
-		if blueSteps == 0:
-			blueSteps = 1
-		if greenSteps == 0:
+		if greenSteps == 0 and color[1] != prevColor[1]:
 			greenSteps = 1
+		if blueSteps == 0 and color[2] != prevColor[2]:
+			blueSteps = 1
 
 		t = ColorTransform(led, color, prevColor, redSteps, blueSteps, greenSteps)
 		self.animations.append(t)
@@ -193,26 +193,24 @@ class ColorTransformAnimation(BaseAnimation):
 
 				steps = [animation.redStep, animation.greenStep, animation.blueStep]
 
-				for c in range(3):
+				for c in xrange(3):
+					mc = color[c]
+					s = steps[c]
+					t = animation.targetColor[c]
+
 					if animation.direction[c]:
-						color[c] += steps[c]
+						if mc + s > t:
+							color[c] = t
+						else:
+							color[c] += steps[c]
 					else:
-						color[c] -= steps[c]
-
-					#"overshoot correction"
-					#True means it should be increasing in direction
-					#print("color = {}, target = {}".format(color[c], animation.targetColor[c]))
-					#print("direction = {}".format(animation.direction[c]))
-					#print("step: {}".format(steps[c]))	
-
-					if animation.direction[c] and color[c] > animation.targetColor[c]:
-						#print("corrected")
-						color[c] = animation.targetColor[c]
-					elif not animation.direction[c] and color[c] < animation.targetColor[c]:
-						#print("corrected")
-						color[c] = animation.targetColor[c]
+						if mc - s < t:
+							color[c] = t
+						else:
+							color[c] -= steps[c]
 
 				#print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
+				#print("start color: {}".format(animation.startColor))
 				#print("steps: {}".format(steps))
 				#print("direction = {}".format(animation.direction))
 				self.leds.changeColor(animation.led, color)
@@ -492,10 +490,12 @@ class OpenCvSimpleDriver:
 
 		if not isinstance(self.image, list):
 			self.image = np.zeros((height, width, 3), np.uint8)
+			cv2.imshow("output", self.image)
+			cv2.waitKey(1)
 
 		x=0
 		for color in ledsData:
-			self.image[height - self.size : height, x : x + self.size] = color
+			self.image[height - self.size : height, x : x + self.size] = color[::-1]
 			x+=self.size
 
 		cv2.imshow("output", self.image)
