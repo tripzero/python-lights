@@ -253,6 +253,8 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 	@asyncio.coroutine
 	def _connect(self):
 		self.reader, self.writer = yield asyncio.From(asyncio.open_connection(self.addy, self.port))
+		protocol = self.writer.transport._protocol
+		protocol.connection_lost = self._onDisconnected
 		self.connected=True
 		if self.onConnected:
 			self.onConnected()
@@ -269,7 +271,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 
 		if not self.connected:
 			return
-
+		
 		if self.debug:
 			self.log.write("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
 
@@ -321,6 +323,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			self.onConnected()
 
 	def _onDisconnected(self):
+		self.connected = False
 		if self.reader:
 			self.reader.close()
 		if self.writer:
