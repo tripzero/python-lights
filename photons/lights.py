@@ -448,13 +448,21 @@ class Ws2801Driver:
 		self.spiDev.write(bytearray(np.getbuffer(ledsData)))
 
 class Apa102Driver:
-	spiDev = None
+	gbr =	[1, 2, 0]
+	bgr = [2, 1, 0]
 
 	def __init__(self, freqs=1000000, debug=None):
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
 		self.brightness = 0xff
+
+		"""
+		Set the color order of the lights.  This is used to convert
+		RGB (the default format) to the right physical colors on the 
+		light.
+		"""
+		self.pixel_order = Apa102Driver.gbr
 
 	def setGlobalBrightness(self, brightness):
 		if brightness >= 0 and brightness <= 255:
@@ -463,10 +471,11 @@ class Apa102Driver:
 	def update(self, ledsData):
 		data = bytearray()
 		data[:4] = [0x00, 0x00, 0x00, 0x00]
+		po = self.pixel_order
 		for rgb in ledsData:
 			data.append(self.brightness)
 			# apa102 is GBR because THINGS
-			data.extend([rgb[1], rgb[2], rgb[0]])
+			data.extend([rgb[po[0]], rgb[po[1]], rgb[po[2]]])
 
 		#endframe
 		data.extend([0xff, 0xff, 0xff, 0xff])
