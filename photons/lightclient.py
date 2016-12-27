@@ -322,12 +322,12 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		if self.onConnected:
 			self.onConnected()
 
-	def _onDisconnected(self):
+	def _onDisconnected(self, reason=None):
 		self.connected = False
-		if self.reader:
-			self.reader.close()
+
 		if self.writer:
 			self.writer.close()
+
 		if self.onDisconnected:
 			self.onDisconnected()
 

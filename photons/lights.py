@@ -15,25 +15,34 @@ class Id:
 class Promise:
 	success = None
 	args = None
-	childPromise = None
+	promise = None
 	def then(self, successCb, *args):
 		self.success = successCb
 		if len(args) > 0:
 			self.args = args
 
-		#return self.childPromise = Promise()
+		if not self.promise:
+			self.promise = Promise()
+		
+		return self.promise
 
 	def call(self):
+		ret = None
 		if self.success == None:
 			return
-		if self.args is not None:
-			self.success(*self.args)
-		else:
-			self.success()
 
-		"""if self.childPromise:
-			self.childPromise.call()
-		"""
+		if self.args is not None:
+			ret = self.success(*self.args)
+		else:
+			ret = self.success()
+
+		if ret and isinstance(ret, Promise) and self.promise:
+			print("promise future returned a promise.  Auto-attaching to chain")
+			ret.then(self.promise.call)
+		elif self.promise:
+			print("promise future return value not a promise")
+			self.promise.call()
+
 
 class Chase(Id):
 	steps = 0
@@ -157,8 +166,12 @@ class ColorTransformAnimation(BaseAnimation):
 		self.leds = leds
 		self.animations = []
 
-	def addAnimation(self, led, color, time):
-		prevColor = self.leds.ledsData[led]
+	def addAnimation(self, led, color, time, fromColor = None):
+		if not fromColor:
+			prevColor = self.leds.ledsData[led]
+		else:
+			prevColor = fromColor
+
 		redSteps = abs(prevColor[0] - color[0])
 		greenSteps = abs(prevColor[1] - color[1])
 		blueSteps = abs(prevColor[2] - color[2])
@@ -175,56 +188,64 @@ class ColorTransformAnimation(BaseAnimation):
 		if blueSteps == 0 and color[2] != prevColor[2]:
 			blueSteps = 1
 
+
 		t = ColorTransform(led, color, prevColor, redSteps, blueSteps, greenSteps)
 		self.animations.append(t)
 
 	def start(self):
+		#print("animation {} started".format(self))
 		asyncio.get_event_loop().create_task(self._run())
 
 		return self.promise
 
 	@asyncio.coroutine
 	def _run(self):
-		while len(self.animations):
-			#print ("num animations left: {}".format(len(self.animations)))
-			remove_list = []
-			for animation in self.animations:
-				color = self.leds.ledsData[animation.led]
+		#print("trying to run animation for {}".format(self))
+		try: 
+			while len(self.animations):
+				#print ("num animations left: {}".format(len(self.animations)))
+				remove_list = []
+				for animation in self.animations:
+					color = self.leds.ledsData[animation.led]
 
-				steps = [animation.redStep, animation.greenStep, animation.blueStep]
+					steps = [animation.redStep, animation.greenStep, animation.blueStep]
 
-				for c in xrange(3):
-					mc = color[c]
-					s = steps[c]
-					t = animation.targetColor[c]
+					for c in xrange(3):
+						mc = color[c]
+						s = steps[c]
+						t = animation.targetColor[c]
 
-					if animation.direction[c]:
-						if mc + s > t:
-							color[c] = t
+						if animation.direction[c]:
+							if mc + s > t:
+								color[c] = t
+							else:
+								color[c] += steps[c]
 						else:
-							color[c] += steps[c]
-					else:
-						if mc - s < t:
-							color[c] = t
-						else:
-							color[c] -= steps[c]
+							if mc - s < t:
+								color[c] = t
+							else:
+								color[c] -= steps[c]
 
-				#print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
-				#print("start color: {}".format(animation.startColor))
-				#print("steps: {}".format(steps))
-				#print("direction = {}".format(animation.direction))
-				self.leds.changeColor(animation.led, color)
+					#print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
+					#print("start color: {}".format(animation.startColor))
+					#print("steps: {}".format(steps))
+					#print("direction = {}".format(animation.direction))
+					self.leds.changeColor(animation.led, color)
+					
+					if np.array_equal(color, animation.targetColor):
+						animation.complete()
+						remove_list.append(animation)
 				
-				if np.array_equal(color, animation.targetColor):
-					animation.complete()
-					remove_list.append(animation)
-			
-			#print("remove_list = {}".format(len(remove_list)))
-			for remove in remove_list:
-				self.animations.remove(remove)
+				#print("remove_list = {}".format(len(remove_list)))
+				for remove in remove_list:
+					self.animations.remove(remove)
 
-			#print("yielding")
-			yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
+				#print("yielding")
+				yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
+		except:
+			print("error in animation loop for {}".format(self))
+
+		#print("animation {} is complete. Calling promise".format(self))
 
 		self.promise.call()
 
