@@ -455,7 +455,7 @@ class Apa102Driver:
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
-		self.brightness = 0xff
+		self.brightness = 0b11111
 
 		"""
 		Set the color order of the lights.  This is used to convert
@@ -465,16 +465,26 @@ class Apa102Driver:
 		self.pixel_order = Apa102Driver.gbr
 
 	def setGlobalBrightness(self, brightness):
-		if brightness >= 0 and brightness <= 255:
+		if brightness >= 0 and brightness <= 100:
 			self.brightness = brightness
+		else:
+			print("brightness is out of range (0-100)")
+
+	def _calcGlobalBrightness(self, brightness):
+		brightness = 31 * 0.01 * brightness
+		msb = 0b11100000
+		if brightness > 31:
+			brightness = 31
+
+		return msb | brightness
 
 	def update(self, ledsData):
 		data = bytearray()
 		data[:4] = [0x00, 0x00, 0x00, 0x00]
 		po = self.pixel_order
 		for rgb in ledsData:
-			data.append(self.brightness)
-			# apa102 is GBR because THINGS
+			data.append(self._calcGlobalBrightness(self.brightness))
+			# write pixel data
 			data.extend([rgb[po[0]], rgb[po[1]], rgb[po[2]]])
 
 		#endframe
