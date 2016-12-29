@@ -521,29 +521,34 @@ class Apa102Driver:
 class OpenCvSimpleDriver:
 	
 
-	def __init__(self, debug=None):
+	def __init__(self, debug=None, size=50):
 		self.debug=debug
 		self.image = None
-		self.size = 50
+		self.size = size
+		
+		print("using size: {}".format(self.size))
 
-	def update(self, ledsData):
 		import cv2
 
+		self.imshow = cv2.imshow
+		self.waitKey = cv2.waitKey
+
+	def update(self, ledsData):
 		width = len(ledsData) * self.size
 		height = self.size
 
 		if not isinstance(self.image, list):
 			self.image = np.zeros((height, width, 3), np.uint8)
-			cv2.imshow("output", self.image)
-			cv2.waitKey(1)
+			self.imshow("output", self.image)
+			self.waitKey(1)
 
 		x=0
 		for color in ledsData:
 			self.image[height - self.size : height, x : x + self.size] = color[::-1]
 			x+=self.size
 
-		cv2.imshow("output", self.image)
-		cv2.waitKey(1)
+		self.imshow("output", self.image)
+		self.waitKey(1)
 
 
 class OpenCvDriver:
