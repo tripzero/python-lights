@@ -468,11 +468,14 @@ class Ws2801Driver:
 	def update(self, ledsData):
 		self.spiDev.write(bytearray(np.getbuffer(ledsData)))
 
-class Apa102Driver:
+class PixelFormat:
 	gbr =	[1, 2, 0]
 	bgr = [2, 1, 0]
+	
 
-	def __init__(self, freqs=1000000, debug=None, brightness=100, pixel_order=Apa102Driver.gbr):
+class Apa102Driver:
+
+	def __init__(self, freqs=1000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
