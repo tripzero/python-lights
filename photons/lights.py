@@ -493,6 +493,7 @@ class Apa102Driver:
 
 	def _calcGlobalBrightness(self, brightness):
 		brightness = 31 * 0.01 * brightness
+		brightness = int(brightness)
 		msb = 0b11100000
 		if brightness > 31:
 			brightness = 31
