@@ -472,18 +472,18 @@ class Apa102Driver:
 	gbr =	[1, 2, 0]
 	bgr = [2, 1, 0]
 
-	def __init__(self, freqs=1000000, debug=None):
+	def __init__(self, freqs=1000000, debug=None, brightness=100, pixel_order=Apa102Driver.gbr):
 		import mraa
 		self.spiDev = mraa.Spi(0)
 		self.spiDev.frequency(freqs)
-		self.brightness = 0b11111
+		self.brightness = brightness
 
 		"""
 		Set the color order of the lights.  This is used to convert
 		RGB (the default format) to the right physical colors on the 
 		light.
 		"""
-		self.pixel_order = Apa102Driver.gbr
+		self.pixel_order = pixel_order
 
 	def setGlobalBrightness(self, brightness):
 		if brightness >= 0 and brightness <= 100:
