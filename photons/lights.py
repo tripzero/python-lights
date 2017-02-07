@@ -37,10 +37,10 @@ class Promise:
 			ret = self.success()
 
 		if ret and isinstance(ret, Promise) and self.promise:
-			print("promise future returned a promise.  Auto-attaching to chain")
+			#print("promise future returned a promise.  Auto-attaching to chain")
 			ret.then(self.promise.call)
 		elif self.promise:
-			print("promise future return value not a promise")
+			#print("promise future return value not a promise")
 			self.promise.call()
 
 
