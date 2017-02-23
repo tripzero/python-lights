@@ -502,7 +502,7 @@ class Ws2801Driver:
 class PixelFormat:
 	gbr =	[1, 2, 0]
 	bgr = [2, 1, 0]
-	
+
 
 class Apa102Driver:
 
@@ -533,6 +533,9 @@ class Apa102Driver:
 			brightness = 31
 
 		return msb | brightness
+
+	def power(self, ledsData):
+		return np.sum((ledsData / (255, 255, 255) * 0.2))
 
 	def update(self, ledsData):
 		data = bytearray()
