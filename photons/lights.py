@@ -13,11 +13,16 @@ class Id:
 		Id.staticId += 1
 
 class Promise:
-	success = None
-	args = None
-	promise = None
+	
+	def __init__(self):
+		self.success = None
+		self.args = []
+		self.promise = None
+
 	def then(self, successCb, *args):
+
 		self.success = successCb
+
 		if len(args) > 0:
 			self.args = args
 
@@ -31,7 +36,7 @@ class Promise:
 		if self.success == None:
 			return
 
-		if self.args is not None:
+		if len(self.args):
 			ret = self.success(*self.args)
 		else:
 			ret = self.success()
@@ -103,10 +108,9 @@ class AnimationFunc:
 		self.args = args
 
 class BaseAnimation:
-	animations = []
-	promise = None
 
 	def __init__(self):
+		self.animations = []
 		self.promise = Promise()
 
 	def addAnimation(self, animation, *args):
@@ -122,6 +126,9 @@ class BaseAnimation:
 		if not methodCall:
 			raise Exception("animation is not a method")
 
+		if isinstance(methodCall, BaseAnimation):
+			methodCall = methodCall.start
+
 		if not args:
 			return methodCall()
 		else:
@@ -136,12 +143,16 @@ class SequentialAnimation(BaseAnimation):
 		if len(self.animations) == 0:
 			self.promise.call()
 		animation = self.animations.pop(0)
-		self._do(animation).then(self._animationComplete, animation)
+		self._do(animation).then(self._animationComplete)
 		return self.promise
 
-	def _animationComplete(self, animation):
+	def _animationComplete(self):
 		if len(self.animations) == 0:
 			self.promise.call()
+			return
+
+		animation = self.animations.pop(0)
+		self._do(animation).then(self._animationComplete)
 
 class ConcurrentAnimation(BaseAnimation):
 
@@ -159,6 +170,23 @@ class ConcurrentAnimation(BaseAnimation):
 
 		if len(self.animations) == 0:
 			self.promise.call()
+
+class Delay(BaseAnimation):
+	def __init__(self, time):
+		BaseAnimation.__init__(self)
+		#time in miliseconds:
+		self.time = time
+
+	@asyncio.coroutine
+	def do_sleep(self):
+		yield asyncio.From(asyncio.sleep(self.time / 1000.0))
+		self.promise.call()
+
+	def start(self):
+		asyncio.get_event_loop().create_task(self.do_sleep())
+		
+		return self.promise
+
 		
 class ColorTransformAnimation(BaseAnimation):
 	def __init__(self, leds):
@@ -176,6 +204,9 @@ class ColorTransformAnimation(BaseAnimation):
 		greenSteps = abs(prevColor[1] - color[1])
 		blueSteps = abs(prevColor[2] - color[2])
 		numFrames = int(self.leds.fps * (time / 1000.0))
+
+		if numFrames == 0:
+			numFrames = 1
 
 		redSteps = redSteps / numFrames
 		greenSteps = greenSteps / numFrames
