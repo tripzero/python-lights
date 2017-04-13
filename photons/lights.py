@@ -4,6 +4,7 @@ import numpy as np
 from gi.repository import GObject
 import trollius as asyncio
 import copy
+import math
 
 class Id:
 	id = None
@@ -69,7 +70,7 @@ class Chase(Id):
 
 class ColorTransform(Id):
 
-	def __init__(self, led, targetColor, startColor, redStep, blueStep, greenStep):
+	def __init__(self, led, targetColor, startColor, redStep, blueStep, greenStep, num_frames):
 		Id.__init__(self)
 		self.startColor = (startColor[0], startColor[1], startColor[2])
 		self.led = led
@@ -77,12 +78,10 @@ class ColorTransform(Id):
 		self.redStep = redStep
 		self.greenStep = greenStep
 		self.blueStep = blueStep
-
-		redDirection = targetColor[0] > startColor[0]
-		greenDirection = targetColor[1] > startColor[1]
-		blueDirection = targetColor[2] > startColor[2]
-
-		self.direction = [redDirection, greenDirection, blueDirection]
+		self.steps = [self.redStep, self.greenStep, self.blueStep]
+		self.frame_index = 0
+		self.num_frames=num_frames
+		self.color = startColor
 		
 		self.promise = Promise()
 
@@ -189,28 +188,37 @@ class Delay(BaseAnimation):
 
 		
 class ColorTransformAnimation(BaseAnimation):
-	def __init__(self, leds):
+	def __init__(self, leds, debug=False):
 		BaseAnimation.__init__(self)
 		self.leds = leds
 		self.animations = []
+		self.debug=debug
 
 	def addAnimation(self, led, color, time, fromColor = None):
 		if not fromColor:
-			prevColor = self.leds.ledsData[led]
+			prevColor = self.leds.color(led)[:]
 		else:
 			prevColor = fromColor
 
-		redSteps = abs(prevColor[0] - color[0])
-		greenSteps = abs(prevColor[1] - color[1])
-		blueSteps = abs(prevColor[2] - color[2])
-		numFrames = int(self.leds.fps * (time / 1000.0))
+		
+		redDelta = color[0] - prevColor[0]
+		greenDelta = color[1] - prevColor[1]
+		blueDelta = color[2] - prevColor[2]
+		numFrames = self.leds.fps * (time / 1000.0)
 
-		if numFrames == 0:
-			numFrames = 1
 
-		redSteps = redSteps / numFrames
-		greenSteps = greenSteps / numFrames
-		blueSteps = blueSteps / numFrames
+		if numFrames < 1.0:
+			numFrames = 1.0
+
+
+		redSteps = redDelta / numFrames
+		greenSteps = greenDelta / numFrames
+		blueSteps = blueDelta / numFrames
+
+		if self.debug:
+			print("color = {}, target = {}".format(prevColor, color))
+			print("num frames = {}".format(numFrames))
+			print("redSteps = {}".format(redSteps))	
 
 		if redSteps == 0 and color[0] != prevColor[0]:
 			redSteps = 1
@@ -220,7 +228,7 @@ class ColorTransformAnimation(BaseAnimation):
 			blueSteps = 1
 
 
-		t = ColorTransform(led, color, prevColor, redSteps, blueSteps, greenSteps)
+		t = ColorTransform(led, color[:], prevColor, redSteps, blueSteps, greenSteps, math.floor(numFrames))
 		self.animations.append(t)
 
 	def start(self):
@@ -229,54 +237,65 @@ class ColorTransformAnimation(BaseAnimation):
 
 		return self.promise
 
+	def change_color(self, animation):
+		color = animation.color
+
+		steps = animation.steps
+
+		ret = False
+
+		for c in xrange(3):
+			s = steps[c]
+			color[c] += s
+
+		animation.frame_index += 1
+
+		if animation.frame_index >= animation.num_frames:
+			color = animation.targetColor
+			ret = True
+			animation.complete()
+
+		animation.color = color
+		self.leds.changeColor(animation.led, animation.color)
+
+		if self.debug:
+			print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
+			print("start color: {}".format(animation.startColor))
+			print("steps: {}".format(steps))
+			print("{}/{} complete".format(animation.frame_index, animation.num_frames))
+
+		return ret
+
 	@asyncio.coroutine
 	def _run(self):
 		#print("trying to run animation for {}".format(self))
 		try: 
-			while len(self.animations):
+			done_count = 0
+			while done_count < len(self.animations):
 				#print ("num animations left: {}".format(len(self.animations)))
+
 				remove_list = []
+
 				for animation in self.animations:
-					color = self.leds.ledsData[animation.led]
+					if self.change_color(animation):
+						#remove_list.append(animation)
+						done_count += 1
 
-					steps = [animation.redStep, animation.greenStep, animation.blueStep]
-
-					for c in xrange(3):
-						mc = color[c]
-						s = steps[c]
-						t = animation.targetColor[c]
-
-						if animation.direction[c]:
-							if mc + s > t:
-								color[c] = t
-							else:
-								color[c] += steps[c]
-						else:
-							if mc - s < t:
-								color[c] = t
-							else:
-								color[c] -= steps[c]
-
-					#print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
-					#print("start color: {}".format(animation.startColor))
-					#print("steps: {}".format(steps))
-					#print("direction = {}".format(animation.direction))
-					self.leds.changeColor(animation.led, color)
-					
-					if np.array_equal(color, animation.targetColor):
-						animation.complete()
-						remove_list.append(animation)
-				
 				#print("remove_list = {}".format(len(remove_list)))
-				for remove in remove_list:
-					self.animations.remove(remove)
+				#for remove in remove_list:
+				#	self.animations.remove(remove)
 
 				#print("yielding")
 				yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
 		except:
 			print("error in animation loop for {}".format(self))
+			import sys, traceback
+			exc_type, exc_value, exc_traceback = sys.exc_info()
+			traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=6, file=sys.stdout)
 
-		#print("animation {} is complete. Calling promise".format(self))
+		if self.debug:
+			print("animation {} is complete. Calling promise".format(self))
 
 		self.promise.call()
 
@@ -299,7 +318,7 @@ class LightArray:
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
 
 	def clear(self):
-		self.ledsData[:] = (0,0,0)
+		self.ledsData[:] = [0,0,0]
 		self.update()
 
 	def update(self):
@@ -418,6 +437,10 @@ class LightArray2(LightFpsController):
 		LightFpsController.__init__(self, driver, fps, loop)
 		self.setLedArraySize(ledArraySize)
 
+		import threading
+
+		self.locker = threading.Lock()
+
 	def setLedArraySize(self, ledArraySize):
 		self.ledArraySize = ledArraySize
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
@@ -427,8 +450,13 @@ class LightArray2(LightFpsController):
 		self.update()
 
 	def changeColor(self, ledNumber, color):
-		self.ledsData[ledNumber] = color
-		self.update()
+		with self.locker:
+			self.ledsData[ledNumber] = color
+			self.update()
+
+	def color(self, ledNumber):
+		with self.locker:
+			return self.ledsData[ledNumber]
 
 	def pushFront(self, colors):
 		if isinstance(colors[0], tuple):
@@ -555,10 +583,11 @@ class Apa102Driver:
 class OpenCvSimpleDriver:
 	
 
-	def __init__(self, debug=None, size=50):
+	def __init__(self, debug=None, size=50, wrap=100):
 		self.debug=debug
 		self.image = None
 		self.size = size
+		self.wrap = wrap
 		
 		print("using size: {}".format(self.size))
 
@@ -567,19 +596,34 @@ class OpenCvSimpleDriver:
 		self.imshow = cv2.imshow
 		self.waitKey = cv2.waitKey
 
+		cv2.namedWindow("output", cv2.WINDOW_OPENGL)
+
 	def update(self, ledsData):
 		width = len(ledsData) * self.size
 		height = self.size
+
+		if len(ledsData) > self.wrap:
+			width = self.wrap * self.size
+			height = self.size * len(ledsData) / self.wrap
+
 
 		if not isinstance(self.image, list):
 			self.image = np.zeros((height, width, 3), np.uint8)
 			self.imshow("output", self.image)
 			self.waitKey(1)
 
-		x=0
+		x = 0
+		i = 0
+		y = 0
+
 		for color in ledsData:
-			self.image[height - self.size : height, x : x + self.size] = color[::-1]
-			x+=self.size
+			self.image[y : y + self.size, x : x + self.size] = color[::-1]
+			x += self.size
+			i += 1
+			if i > self.wrap:
+				y += self.size
+				x = 0
+				i = 0
 
 		self.imshow("output", self.image)
 		self.waitKey(1)
@@ -671,7 +715,7 @@ class OpenCvDriver:
 
 class DummyDriver:
 
-	def __init__(self, debug=None):
+	def __init__(self, debug=None, **kwargs):
 		pass
 
 	def update(self, ledsData):
