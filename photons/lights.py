@@ -584,7 +584,7 @@ class Apa102Driver:
 class OpenCvSimpleDriver:
 	
 
-	def __init__(self, debug=None, size=50, wrap=100):
+	def __init__(self, debug=None, size=50, wrap=100, opengl=False):
 		self.debug=debug
 		self.image = None
 		self.size = size
@@ -597,7 +597,8 @@ class OpenCvSimpleDriver:
 		self.imshow = cv2.imshow
 		self.waitKey = cv2.waitKey
 
-		cv2.namedWindow("output", cv2.WINDOW_OPENGL)
+		if opengl:
+			cv2.namedWindow("output", cv2.WINDOW_OPENGL)
 
 	def update(self, ledsData):
 		width = len(ledsData) * self.size
