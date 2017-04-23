@@ -530,6 +530,7 @@ class Ws2801Driver:
 class PixelFormat:
 	gbr =	[1, 2, 0]
 	bgr = [2, 1, 0]
+	rbg = [0, 2, 1]
 
 
 class Apa102Driver:
