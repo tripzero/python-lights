@@ -20,6 +20,17 @@ class LightParser:
 			return func
 		return make_command
 
+class IncompatibleProtocolException(Exception):
+	def __init__(self, protocol, should_be_protocol):
+		Exception.__init__(self)
+
+		print("protocol {} should be {}".format(protocol, should_be_protocol))
+
+class BadMessageTypeException(Exception):
+	def __init__(self):
+		Exception.__init__(self)
+		print("message type should be bytearray")
+
 class LightProtocol:
 	"""
 		Light protocol follows the following frame/payload structure:
@@ -33,7 +44,7 @@ class LightProtocol:
 
 		Payload:
 		[Command][Data]
-		[1byte]
+		[1byte][...]
 
 
 	"""
@@ -41,8 +52,9 @@ class LightProtocol:
 	
 	def __init__(self, leds=None):
 		"""leds = LightArray2 handle.  This is only used when trying to parse."""
-		self.leds=leds
-		pass
+		self.leds = leds
+		self.protocol_version = 0x01 #version 1.0
+		self.debug = 0
 
 	def updateCompress(self, ledsData):
 		index = 0
@@ -105,7 +117,20 @@ class LightProtocol:
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
 		#print ("sending {} update".format(len(ledsToChange)))
-		self.send(ledsToChange)
+		self.send(self.writeHeader(ledsToChange))
+
+	def writeHeader(self, msg):
+		"""write header:
+		[8bit][16bit]
+		[protocol_version][msg_length]
+		"""
+
+		header = bytearray([self.protocol_version]) #protocol version 1.0
+		header.extend(struct.pack('<H', len(msg)))
+
+		msg = header + msg
+
+		return msg
 
 	def setColor(self, id, color):
 		"""
@@ -125,7 +150,7 @@ class LightProtocol:
 		light.extend(color)
 
 		buff = header + light
-		self.send(buff)
+		return self.send(self.writeHeader(buff))
 
 	def setSeries(self, startId, length, color):
 		"""
@@ -142,7 +167,7 @@ class LightProtocol:
 		buff.extend(struct.pack('<H', length))
 		buff.extend(color)
 
-		self.send(buff)
+		return self.send(self.writeHeader(buff))
 
 
 	def setAllColor(self, color):
@@ -161,7 +186,7 @@ class LightProtocol:
 		light.extend(color)
 
 		buff = header + light
-		self.send(buff)
+		return self.send(self.writeHeader(buff))
 
 	def clear(self):
 		"""
@@ -171,36 +196,48 @@ class LightProtocol:
 		Data:
 		[Command]
 		"""
+
 		header = bytearray()
 		header.append(0x03)
 
-		self.send(header)
+		return self.send(self.writeHeader(header))
 
 	def setNumLeds(self, numLeds):
 		buff = bytearray()
 		buff.append(0x02)
 		buff.extend(struct.pack('<H', numLeds))
-		self.send(buff)
+		return self.send(self.writeHeader(buff))
 
 	def setDebug(self, d):
 		buff = bytearray()
 		buff.append(0x05)
 		buff.append(int(d))
-		self.send(buff)
+		return self.send(self.writeHeader(buff))
 
 	def parse(self, msg):
-		cmd = msg[0]
-		if cmd in LightParser.commandsMap:
-			LightParser.commandsMap[cmd](self, msg)
-		else:
-			print("command {0} not supported by this server".format(cmd))
+		if not isinstance(msg, bytearray):
+			raise BadMessageTypeException()
+
+		protocol_version = msg[0]
+		msg_length = struct.unpack('<H', msg[1:3])[0]
+
+		if protocol_version != self.protocol_version:
+			raise IncompatibleProtocolException(protocol_version, self.protocol_version)
+
+		while True:
+			try:
+				cmd = msg[3]
+				if cmd in LightParser.commandsMap:
+					msg = LightParser.commandsMap[cmd](self, msg[3:])
+				else:
+					print("command {0} not supported by this server".format(cmd))
+			except:
+				return
 
 	@LightParser.command(0x01)
 	def parseSetColor(self, msg):
 		cmd = msg[0]
 		numlights = struct.unpack('<H', msg[1:3])[0]
-
-		print("number of lights {0}".format(numlights))
 
 		light = 3 #start at light at position 3 in the msg
 		for i in range(numlights):
@@ -209,28 +246,64 @@ class LightProtocol:
 			g = msg[light+3]
 			b = msg[light+4]
 
-			print("change light id {0} to ({1},{2},{3})".format(id, r, g, b))
+			self.leds.changeColor(id, (r, g, b))
+
 			light += 5 #5 bytes per light
+
+			return msg[8:]
 
 	@LightParser.command(0x03)
 	def parseClear(self, msg):
 		self.leds.clear()
+		return msg[1:]
 
 	@LightParser.command(0x02)
 	def parseSetNumLeds(self, msg):
-		pass
+		numlights = struct.unpack('<H', msg[1:3])[0]
+
+		self.leds.setLedArraySize(numlights)
+
+		return msg[3:]
 
 	@LightParser.command(0x06)
 	def parseSetAllLeds(self, msg):
-		pass
+
+		assert(len(msg) > 3)
+
+		pos = 1
+		r = msg[pos]
+		g = msg[pos+1]
+		b = msg[pos+2]
+
+		for led in xrange(self.leds.ledArraySize):
+			self.leds.changeColor(led, (r, g, b))
+
+		return msg[4:]
 
 	@LightParser.command(0x07)
 	def parseSetSeries(self, msg):
-		pass
+		start_id = struct.unpack('<H', msg[1:3])[0]
+		numlights = struct.unpack('<H', msg[3:5])[0]
+
+		r = msg[5]
+		g = msg[6]
+		b = msg[7]
+
+		i = start_id
+		while i < start_id + numlights:
+			self.leds.changeColor(i, (r, g, b))
+			i += 1
+
+		return msg[8:]
+
 
 	@LightParser.command(0x05)
 	def parseSetDebug(self, msg):
-		pass
+		debug = msg[1]
+
+		self.debug = debug
+
+		return msg[2:]
 
 class LightClient(LightProtocol, ReconnectAsyncio):
 	
@@ -263,24 +336,22 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		self.addy = addy
 		self.port = port
 
-		print("trying to connect to {}:{}".format(addy, port))
+		self.debug_print("trying to connect to {}:{}".format(addy, port))
 
 		self._do_connect()
+
+	def debug_print(self, msg):
+		if self.debug:
+			self.log.write(msg)
+			self.log.write("\n")
 
 	def send(self, msg):
 
 		if not self.connected:
+			self.debug_print("not connected")
 			return
 		
-		if self.debug:
-			self.log.write("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
-
-		#write header:
-
-		header = bytearray([0x01]) #protocol version 1.0
-		header.extend(struct.pack('<H', len(msg)))
-
-		msg = header + msg
+		self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
 
 		@asyncio.coroutine
 		def s2():
@@ -331,6 +402,136 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		if self.onDisconnected:
 			self.onDisconnected()
 
+
+def test_protocol():
+
+	class TestClient(LightProtocol):
+		def __init__(self, num_lights=10):
+
+			LightProtocol.__init__(self)
+
+			from lights import LightArray2, OpenCvSimpleDriver
+			self.leds = LightArray2(num_lights, OpenCvSimpleDriver())
+			self.server = LightProtocol(self.leds)
+
+		def send(self, buffer):
+			self.server.parse(buffer)
+
+
+	num_lights = 10
+	c = TestClient(num_lights)
+
+	#set all colors to red, green, than blue
+	@asyncio.coroutine
+	def test_set_color():
+		print("test_set_color")
+		print("============\n")
+
+		print("setColor: red")
+		for i in xrange(num_lights):
+			c.setColor(i, (255, 0, 0))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+		print("setColor: green")
+		for i in xrange(num_lights):
+			c.setColor(i, (0, 255, 0))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+		print("setColor: blue")
+		for i in xrange(num_lights):
+			c.setColor(i, (0, 0, 255))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+	@asyncio.coroutine
+	def test_clear():
+		print("test_clear")
+		print("==========\n")
+
+		c.clear()
+		yield asyncio.From(asyncio.sleep(5))
+
+	@asyncio.coroutine
+	def test_set_all():
+		print("test_set_all")
+		print("============\n")
+
+		print("setAllColor: red")
+		c.setAllColor((255, 0 , 0))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+		print("setAllColor: green")
+		c.setAllColor((0, 255 , 0))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+		print("setAllColor: blue")
+		c.setAllColor((0, 0 , 255))
+		yield asyncio.From(asyncio.sleep(5))
+
+	@asyncio.coroutine
+	def test_set_series():
+		print("test_set_series")
+		print("===============\n")
+		# first and last led = red
+
+		c.setColor(0, (255, 0, 0))
+		c.setColor(num_lights-1, (255, 0, 0))
+
+		#all leds in between = blue
+
+		c.setSeries(1, num_lights-2, (0, 0, 255))
+
+		yield asyncio.From(asyncio.sleep(5))
+
+	@asyncio.coroutine
+	def test_multimsg():
+		print("test_multimsg")
+		print("============\n")
+
+		msg = '0101000301040006000064'
+		msg = bytearray(msg.decode('hex'))
+
+		print("should be blueish...")
+
+		c.send(msg)
+
+		yield asyncio.From(asyncio.sleep(5))
+
+	def test_debug():
+		print("test_debug")
+		print("============\n")
+
+		c.setDebug(1)
+		assert(c.server.debug)
+
+		print("pass")
+
+	def test_setNumLeds():
+		print("test_setNumLeds")
+		print("===============\n")
+		c.setNumLeds(1)
+		assert(c.leds.ledArraySize == 1)
+		c.setNumLeds(num_lights)
+		assert(c.leds.ledArraySize == num_lights)
+
+		print("pass")
+
+
+	asyncio.get_event_loop().run_until_complete(test_set_series())
+	asyncio.get_event_loop().run_until_complete(test_set_color())
+	asyncio.get_event_loop().run_until_complete(test_clear())
+	asyncio.get_event_loop().run_until_complete(test_set_all())
+	asyncio.get_event_loop().run_until_complete(test_clear())
+	asyncio.get_event_loop().run_until_complete(test_multimsg())
+	test_debug()
+	test_setNumLeds()
+
+
+
 if __name__ == "__main__":
 	import argparse
 	parser = argparse.ArgumentParser()
@@ -341,22 +542,21 @@ if __name__ == "__main__":
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	args = parser.parse_args()
 
-	client = LightClient()
+	if args.test:
+		test_protocol()
+		quit()
 
-	if not args.test:
-		if not client.connectTo(args.address, args.port):
-			quit()
-	else:
-		server = LightProtocol()
-		client.send = server.parse
+		
+	client = LightClient(debug=True)
 
+	def onConnected():
+		print("client onConnected:")
+		client.clear()
+		client.setAllColor((0, 0, 100))
 
-	#client.setNumLeds(args.num)
+	client.onConnected = onConnected
 
-	client.setAllColor((0, 0, 100))
-
-	#for i in range(20):
-	#	client.setColor(0, (100, 0, 0))
+	client.connectTo(args.address, args.port)
 
 	client.loop.run_forever()
 	client.loop.close()
