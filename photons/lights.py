@@ -272,20 +272,13 @@ class ColorTransformAnimation(BaseAnimation):
 		try: 
 			done_count = 0
 			while done_count < len(self.animations):
-				#print ("num animations left: {}".format(len(self.animations)))
 
 				remove_list = []
 
 				for animation in self.animations:
 					if self.change_color(animation):
-						#remove_list.append(animation)
 						done_count += 1
 
-				#print("remove_list = {}".format(len(remove_list)))
-				#for remove in remove_list:
-				#	self.animations.remove(remove)
-
-				#print("yielding")
 				yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
 		except:
 			print("error in animation loop for {}".format(self))
