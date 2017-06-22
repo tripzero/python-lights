@@ -5,7 +5,12 @@ import trollius as asyncio
 import numpy as np
 import struct
 import binascii
-from wss.wssclient import ReconnectAsyncio
+from wss.wssclient import ReconnectAsyncio, Client
+
+try:
+	range = xrange
+except:
+	pass
 
 #log.startLogging(sys.stdout)
 
@@ -23,13 +28,15 @@ class LightParser:
 class IncompatibleProtocolException(Exception):
 	def __init__(self, protocol, should_be_protocol):
 		Exception.__init__(self)
-
 		print("protocol {} should be {}".format(protocol, should_be_protocol))
 
 class BadMessageTypeException(Exception):
 	def __init__(self):
 		Exception.__init__(self)
 		print("message type should be bytearray")
+
+class InvalidCommandException(Exception):
+	pass
 
 class LightProtocol:
 	"""
@@ -50,11 +57,15 @@ class LightProtocol:
 	"""
 	ledsDataCopy = None
 	
-	def __init__(self, leds=None):
+	def __init__(self, leds=None, debug = 0):
 		"""leds = LightArray2 handle.  This is only used when trying to parse."""
 		self.leds = leds
 		self.protocol_version = 0x01 #version 1.0
-		self.debug = 0
+		self.debug = debug
+
+	def debug_print(self, msg):
+		if self.debug:
+			print(msg)
 
 	def updateCompress(self, ledsData):
 		index = 0
@@ -177,6 +188,7 @@ class LightProtocol:
 
 		Data:
 		[Command][r][g][b]
+
 		"""
 
 		header = bytearray()
@@ -224,15 +236,19 @@ class LightProtocol:
 		if protocol_version != self.protocol_version:
 			raise IncompatibleProtocolException(protocol_version, self.protocol_version)
 
-		while True:
-			try:
-				cmd = msg[3]
-				if cmd in LightParser.commandsMap:
-					msg = LightParser.commandsMap[cmd](self, msg[3:])
-				else:
-					print("command {0} not supported by this server".format(cmd))
-			except:
-				return
+		if self.debug:
+					self.debug_print("message: {}".format(binascii.hexlify(msg)))
+
+		while len(msg):
+			
+			cmd = msg[3]
+			if cmd in LightParser.commandsMap:
+				msg = LightParser.commandsMap[cmd](self, msg[3:])
+
+				if self.debug:
+					self.debug_print("remaining message: {}".format(binascii.hexlify(msg)))
+			else:
+				raise InvalidCommandException("command {0} not supported in {}".format(cmd, self.protocol_version))
 
 	@LightParser.command(0x01)
 	def parseSetColor(self, msg):
@@ -242,6 +258,7 @@ class LightProtocol:
 		light = 3 #start at light at position 3 in the msg
 		for i in range(numlights):
 			id = struct.unpack('<H', msg[light:light+2])[0]
+
 			r = msg[light+2]
 			g = msg[light+3]
 			b = msg[light+4]
@@ -250,7 +267,7 @@ class LightProtocol:
 
 			light += 5 #5 bytes per light
 
-			return msg[8:]
+		return msg[light:]
 
 	@LightParser.command(0x03)
 	def parseClear(self, msg):
@@ -304,6 +321,20 @@ class LightProtocol:
 		self.debug = debug
 
 		return msg[2:]
+
+class LightClientWss(Client, LightProtocol):
+
+	def __init__(self, host=None, port=None, retry = False, loop = None, debug = False):
+		Client.__init__(self, retry = retry, loop = loop)
+		LightProtocol.__init__(self, debug=debug)
+
+		self.debug = debug
+
+		if host and port:
+			self.connectTo(host, port, useSsl=False)
+
+	def send(self, msg):
+		self.sendBinaryMsg(bytes(msg))
 
 class LightClient(LightProtocol, ReconnectAsyncio):
 	
@@ -372,7 +403,8 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		def s():
 			try:
 				self.writer.write(msg)
-				self.writer.drain()
+				#self.writer.drain()
+				yield asyncio.From (self.writer.drain())
 			
 			except TimeoutError:
 				self.connected = False
@@ -412,7 +444,7 @@ def test_protocol():
 
 			from lights import LightArray2, OpenCvSimpleDriver
 			self.leds = LightArray2(num_lights, OpenCvSimpleDriver())
-			self.server = LightProtocol(self.leds)
+			self.server = LightProtocol(self.leds, debug=True)
 
 		def send(self, buffer):
 			self.server.parse(buffer)
@@ -485,6 +517,8 @@ def test_protocol():
 
 		c.setSeries(1, num_lights-2, (0, 0, 255))
 
+		print("red, blue, red")
+
 		yield asyncio.From(asyncio.sleep(5))
 
 	@asyncio.coroutine
@@ -499,6 +533,14 @@ def test_protocol():
 
 		c.send(msg)
 
+		yield asyncio.From(asyncio.sleep(5))
+
+		print("should be a rainbow")
+
+		msg = '013500010a000000ffff00010081ff00020000ff920300007bff04006a00ff05006100000600b500000700ff00000800ff00000900ff7700'
+		msg = bytearray(msg.decode('hex'))
+
+		c.send(msg)
 		yield asyncio.From(asyncio.sleep(5))
 
 	def test_debug():
@@ -521,12 +563,13 @@ def test_protocol():
 		print("pass")
 
 
+	asyncio.get_event_loop().run_until_complete(test_clear())
+	asyncio.get_event_loop().run_until_complete(test_multimsg())
 	asyncio.get_event_loop().run_until_complete(test_set_series())
 	asyncio.get_event_loop().run_until_complete(test_set_color())
 	asyncio.get_event_loop().run_until_complete(test_clear())
 	asyncio.get_event_loop().run_until_complete(test_set_all())
 	asyncio.get_event_loop().run_until_complete(test_clear())
-	asyncio.get_event_loop().run_until_complete(test_multimsg())
 	test_debug()
 	test_setNumLeds()
 
@@ -538,6 +581,7 @@ if __name__ == "__main__":
 	parser.add_argument('--debug', dest="debug", help="turn on debugging.", action='store_true')
 	parser.add_argument('--test', dest="test", help="self test", action="store_true")
 	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int)
+	parser.add_argument('--wss', dest="wss", help="use wss socket", action="store_true")
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	args = parser.parse_args()
@@ -547,16 +591,24 @@ if __name__ == "__main__":
 		quit()
 
 		
-	client = LightClient(debug=True)
+	client = None
+	if not args.wss:
+		client = LightClient(debug=args.debug)
+	else:
+		client = LightClientWss(debug=args.debug)
 
 	def onConnected():
 		print("client onConnected:")
 		client.clear()
 		client.setAllColor((0, 0, 100))
 
-	client.onConnected = onConnected
+	if args.wss:
+		client.setOpenHandler(onConnected)
+		client.connectTo(args.address, args.port, useSsl=False)
+	else:
+		client.onConnected = onConnected
+		client.connectTo(args.address, args.port)
 
-	client.connectTo(args.address, args.port)
 
 	client.loop.run_forever()
 	client.loop.close()

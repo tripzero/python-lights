@@ -275,6 +275,7 @@ if __name__ == "__main__":
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	parser.add_argument('--device', type=str, dest="device_name", default="", help="particle device name")
 	parser.add_argument('--config', type=str, dest="config_name", default="config.json", help="config")
+
 	args = parser.parse_args()
 
 	loop = asyncio.get_event_loop()
@@ -328,9 +329,8 @@ if __name__ == "__main__":
 		args.numLeds = s.devices[args.device_name].numLights
 		print (args.address)
 
-	if driver_name == "LightProtocol":
-		driver.connectTo(args.address, args.port)
-		driver.setNumLeds(args.numLeds)
+	if driver_name == "LightProtocol" or driver_name == "LightClientWss":
+		driver.connectTo(args.address, args.port, useSsl=False)
 
 	leds = photons.LightArray2(args.numLeds, driver, fps=args.fps)
 

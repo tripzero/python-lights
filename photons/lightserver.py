@@ -1,7 +1,25 @@
 import trollius as asyncio
 from lightclient import LightProtocol
 from binascii import hexlify
+from wss.wssserver import Server, server_main
 
+class LightServerWss(Server):
+	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key"):
+		self.leds = leds
+		self.port = port
+		self.iface = iface
+
+		self.parser = LightProtocol(self.leds)
+
+		Server.__init__(self, port = port, useSsl=useSsl, sslCert=sslCert, sslKey=sslKey)
+
+	def onBinaryMessage(self, msg, fromClient):
+		data = bytearray()
+		data.extend(msg)
+		self.print_debug("can_has_data!!!")
+		self.print_debug("length: {}".format(len(data)))
+		self.print_debug("data: {}".format(hexlify(data)))
+		self.parser.parse(data)
 
 class LightServer():
 
@@ -62,12 +80,14 @@ class LightServer():
 
 
 if __name__ == "__main__":
-	from lights import LightArray2, OpenCvSimpleDriver
+	from lights import LightArray2, OpenCvSimpleDriver, DummyDriver
 	
-	num_lights = 10
+	num_lights = 200
 
-	leds = LightArray2(num_lights, OpenCvSimpleDriver())
-	server = LightServer(leds, 9099, debug=True)
+	leds = LightArray2(num_lights, DummyDriver(), fps=60)
+	server = server_main(ServerClass=LightServerWss, leds=leds)
+
+	server.start()
 
 	asyncio.get_event_loop().run_forever()
 
