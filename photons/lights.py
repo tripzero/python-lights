@@ -1,8 +1,7 @@
 #/usr/bin/env python
 
 import numpy as np
-from gi.repository import GObject
-import trollius as asyncio
+import asyncio
 import copy
 import math
 
@@ -178,7 +177,7 @@ class Delay(BaseAnimation):
 
 	@asyncio.coroutine
 	def do_sleep(self):
-		yield asyncio.From(asyncio.sleep(self.time / 1000.0))
+		yield from (asyncio.sleep(self.time / 1000.0))
 		self.promise.call()
 
 	def start(self):
@@ -244,7 +243,7 @@ class ColorTransformAnimation(BaseAnimation):
 
 		ret = False
 
-		for c in xrange(3):
+		for c in range(3):
 			s = steps[c]
 			color[c] += s
 
@@ -279,7 +278,9 @@ class ColorTransformAnimation(BaseAnimation):
 					if self.change_color(animation):
 						done_count += 1
 
-				yield asyncio.From(asyncio.sleep(1.0/self.leds.fps))
+				yield from (asyncio.sleep(1.0/self.leds.fps))
+		except KeyboardInterrupt:
+			raise KeyboardInterrupt
 		except:
 			print("error in animation loop for {}".format(self))
 			import sys, traceback
@@ -292,100 +293,7 @@ class ColorTransformAnimation(BaseAnimation):
 
 		self.promise.call()
 
-
-
-class LightArray:
-	ledArraySize = 0
-	ledsData = None
-	needsUpdate = False
-	fps = 30
-	driver = None
-
-	def __init__(self, ledArraySize, driver, fps=30):
-		self.setLedArraySize(ledArraySize)
-		self.driver = driver
-		self.fps = 30
-
-	def setLedArraySize(self, ledArraySize):
-		self.ledArraySize = ledArraySize
-		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
-
-	def clear(self):
-		self.ledsData[:] = [0,0,0]
-		self.update()
-
-	def update(self):
-		if self.needsUpdate == False:
-			GObject.timeout_add(1000/self.fps, self._doUpdate)
-		self.needsUpdate = True
-
-	def _doUpdate(self):
-		if self.needsUpdate == True:
-			self.driver.update(self.ledsData)
-			self.needsUpdate = False
-		return False
-
-	def changeColor(self, ledNumber, color):
-		self.ledsData[ledNumber] = color
-		self.update()
-
-	def chase(self, color, time, delay):
-		steps = time / delay
-		c = Chase(color, steps)
-		GObject.timeout_add(delay, self._doChase, c)
-		return c.promise
-
-	def _doChase(self, c):
-		if c.step >= c.steps:
-			c.promise.call()
-			return False
-		if c.led >= self.ledArraySize:
-			c.forward = False
-		if c.led <= 0:
-			c.forward = True
-		#restore previous led color
-		self.changeColor(c.led, c.prevColor)
-
-		if c.forward == True:
-			c.led += 1
-		else:
-			c.led -= 1
-
-		c.prevColor = self.ledsData[c.led]
-
-		self.changeColor(c.led, c.color)
-		c.step += 1
-
-		return True
-
-	def transformColorTo(self, led, color, time):
-		prevColor = self.ledsData[led]
-		steps = [color[0] - prevColor[0], color[1] - prevColor[1], color[2] - prevColor[2]]
-		stepsAbs = [abs(steps[0]), abs(steps[1]), abs(steps[2]), 1]
-		maxSteps = max(1, stepsAbs)
-		delay = time / maxSteps
-		t = TransformToColor(led, color)
-		GObject.timeout_add(delay, self._doTransformColorTo, t)
-		return t.promise
-
-	def _doTransformColorTo(self, transform):
-		stillTransforming = False
-		color = self.ledsData[transform.led]
-		for i in range(3):
-			if color[i] < transform.targetColor[i]:
-				color[i] += 1
-				stillTransforming = True
-			elif color[i] > transform.targetColor[i]:
-				color[i] -= 1
-				stillTransforming = True
-		self.ledsData[transform.led] = color
-		self.update()
-		if stillTransforming == False:
-			transform.complete()
-		return stillTransforming
-
 class LightFpsController:
-
 
 	def __init__(self, driver, fps=30, loop=asyncio.get_event_loop()):
 		self.driver = driver
@@ -411,6 +319,8 @@ class LightFpsController:
 				if self.needsUpdate == True:
 					self.updateNow()
 					self.needsUpdate = False
+			except KeyboardInterrupt:
+				raise KeyboardInterrupt
 			except:
 				print("bork in _doUpdate")
 				import traceback, sys
@@ -418,16 +328,15 @@ class LightFpsController:
 				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
 	                          limit=8, file=sys.stdout)
-			yield asyncio.From(asyncio.sleep(1.0 / self.fps))
+
+			yield from asyncio.sleep(1.0 / self.fps)
 
 class LightArray2(LightFpsController):
-	ledArraySize = 0
-	ledsData = None
-	needsUpdate = False
-	driver = None
 
 	def __init__(self, ledArraySize, driver, fps=30, loop=asyncio.get_event_loop()):
 		LightFpsController.__init__(self, driver, fps, loop)
+		self.ledArraySize = 0
+		self.ledsData = None
 		self.setLedArraySize(ledArraySize)
 
 		import threading
@@ -496,8 +405,8 @@ class LightArray2(LightFpsController):
 
 		steps = [redSteps, greenSteps, blueSteps]
 
-		for i in xrange(numFrames):
-			for c in xrange(3):
+		for i in range(numFrames):
+			for c in range(3):
 				if color[c] < transform.targetColor[c]:
 					color[c] += steps[c]
 				elif color[c] > transform.targetColor[c]:
@@ -505,7 +414,7 @@ class LightArray2(LightFpsController):
 
 			self.changeColor(transform.led, color)
 
-			yield asyncio.From(asyncio.sleep(1.0/self.fps))
+			yield from (asyncio.sleep(1.0/self.fps))
 
 		transform.complete()
 
@@ -593,6 +502,8 @@ class OpenCvSimpleDriver:
 		if opengl:
 			cv2.namedWindow("output", cv2.WINDOW_OPENGL)
 
+		asyncio.get_event_loop().create_task(self.process_cv2_mainloop())
+
 	def update(self, ledsData):
 		width = len(ledsData) * self.size
 		height = self.size
@@ -605,7 +516,6 @@ class OpenCvSimpleDriver:
 		if not isinstance(self.image, list):
 			self.image = np.zeros((height, width, 3), np.uint8)
 			self.imshow("output", self.image)
-			self.waitKey(1)
 
 		x = 0
 		i = 0
@@ -621,7 +531,12 @@ class OpenCvSimpleDriver:
 				i = 0
 
 		self.imshow("output", self.image)
-		self.waitKey(1)
+
+	@asyncio.coroutine
+	def process_cv2_mainloop(self):
+		while True:
+			self.waitKey(1)
+			yield from asyncio.sleep(1.0/60.0) #60 fps...
 
 
 class OpenCvDriver:
@@ -710,17 +625,18 @@ class OpenCvDriver:
 
 class DummyDriver:
 
-	def __init__(self, debug=None, **kwargs):
-		pass
+	def __init__(self, debug=False, **kwargs):
+		self.debug = debug
 
 	def update(self, ledsData):
-		pass
+		if self.debug:
+			print("DummyDriver -> update() called")
 
 def getDriver(driverName = None):
 	try:
 		from lights.lightclient import LightClient, LightClientWss
 	except ImportError:
-		from lightclient import LightClient, LightClientWss
+		from photons import LightClient, LightClientWss
 
 	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient, 
 				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver , "LightClientWss" : LightClientWss}
@@ -735,3 +651,15 @@ def getDriver(driverName = None):
 		print("\t{}".format(driver))
 
 	return None
+
+
+if __name__ == "__main__":
+
+	driver = getDriver("Dummy")()
+
+	lights = LightArray2(10, driver)
+
+	for i in range(10):
+		lights.changeColor(i, (255, 255, 255))
+
+	asyncio.get_event_loop().run_forever()

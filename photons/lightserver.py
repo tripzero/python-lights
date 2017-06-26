@@ -1,55 +1,62 @@
-import trollius as asyncio
-from lightclient import LightProtocol
+import asyncio
+from photons import LightProtocol
 from binascii import hexlify
 from wss.wssserver import Server, server_main
-from collections import deque
+
 
 class LightServerWss(Server):
-	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key"):
+	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key", debug=False):
 		self.leds = leds
 		self.port = port
 		self.iface = iface
 
 		#Keep about 5 seconds worth of data
-		self.queue = deque([], self.leds.fps * 5)
+		self.queue = asyncio.Queue(maxsize = self.leds.fps * 5)
 
-		self.parser = LightProtocol(self.leds)
+		self.parser = LightProtocol(leds = self.leds, debug = debug)
 
-		Server.__init__(self, port = port, useSsl=useSsl, sslCert=sslCert, sslKey=sslKey)
+		Server.__init__(self, port = port, useSsl = useSsl, sslCert = sslCert, sslKey = sslKey)
 
 		asyncio.get_event_loop().create_task(self._processQueue())
+
 
 	def onBinaryMessage(self, msg, fromClient):
 		data = bytearray()
 		data.extend(msg)
-		self.print_debug("can_has_data!!!")
-		self.print_debug("length: {}".format(len(data)))
-		self.print_debug("data: {}".format(hexlify(data)))
 
-		self.queue.append(data)
+		"""
+		self.print_debug("message length: {}".format(len(data)))
+		self.print_debug("message data: {}".format(hexlify(data)))
+		"""
+
+		try:
+			self.queue.put_nowait(data)
+		except asyncio.QueueFull:
+			pass #drop message
 
 	@asyncio.coroutine
 	def _processQueue(self):
 		while True:
-			if len(self.queue):
-				data = self.queue.popleft()
-				self.parser.parse(data)
 
-			yield asyncio.From(asyncio.sleep(1/self.leds.fps))
+			data = yield from self.queue.get()
+			self.parser.parse(data)
+
+			yield from asyncio.sleep(1/self.leds.fps)
 
 
 class LightServer():
 
-	def __init__(self, leds, port, iface = "localhost", debug=False):
+	def __init__(self, leds, port, iface = "localhost", debug=False, **kwargs):
 
 		self.leds = leds
 		self.port = port
 		self.iface = iface
 		self.debug = debug
 
+	def start(self):
 		loop = asyncio.get_event_loop()
 
-		factory = asyncio.start_server(self.new_connection, host = iface, port = port)
+		factory = asyncio.start_server(self.new_connection, host = self.iface, port = self.port)
 		self.server = loop.run_until_complete(factory)
 
 		self.parser = LightProtocol(self.leds)
@@ -70,7 +77,7 @@ class LightServer():
 			while True:
 
 				self.print_debug("reading data...")
-				data = yield asyncio.From(self.client_reader.read())
+				data = yield from self.client_reader.read()
 
 				if data:
 					buff = bytearray()
@@ -97,12 +104,25 @@ class LightServer():
 
 
 if __name__ == "__main__":
-	from lights import LightArray2, OpenCvSimpleDriver, DummyDriver
+	from photons import LightArray2, OpenCvSimpleDriver, DummyDriver
 	
+	import argparse
+
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--wss', dest="wss", help="use wss.", action='store_true')
+
+	args, unknown = parser.parse_known_args()
+
 	num_lights = 200
 
-	leds = LightArray2(num_lights, DummyDriver(), fps=60)
-	server = server_main(ServerClass=LightServerWss, leds=leds)
+	leds = LightArray2(num_lights, OpenCvSimpleDriver(opengl=True), fps=60)
+
+	sc = LightServer
+
+	if args.wss:
+		sc = LightServerWss
+
+	server = server_main(ServerClass=sc, leds=leds)
 
 	server.start()
 

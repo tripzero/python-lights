@@ -1,11 +1,12 @@
 
 
-import trollius as asyncio
+import asyncio
 
 import numpy as np
 import struct
 import binascii
 from wss.wssclient import ReconnectAsyncio, Client
+from collections import deque
 
 try:
 	range = xrange
@@ -112,23 +113,9 @@ class LightProtocol:
 		ledsToChange = bytearray()
 		for i in range(len(diff)):
 			if not np.all(np.equal(diff[i], [0,0,0])):
-				ledsToChange.extend(struct.pack('<H', i))
-				ledsToChange.extend(ledsData[i])
-				#self.setColor(i, ledsData[i])
+				self.setColor(i, ledsData[i])
 				
-		if not len(ledsToChange):
-			#print("no change")
-			return
-
-		header = bytearray()
-		header.append(0x01)
-		header.extend(struct.pack('<H', int(len(ledsToChange)/5)))
-		ledsToChange = header + ledsToChange
-
 		self.ledsDataCopy = np.array(ledsData, copy=True)
-
-		#print ("sending {} update".format(len(ledsToChange)))
-		self.send(self.writeHeader(ledsToChange))
 
 	def writeHeader(self, msg):
 		"""write header:
@@ -161,7 +148,7 @@ class LightProtocol:
 		light.extend(color)
 
 		buff = header + light
-		return self.send(self.writeHeader(buff))
+		return self.send(buff)
 
 	def setSeries(self, startId, length, color):
 		"""
@@ -178,7 +165,7 @@ class LightProtocol:
 		buff.extend(struct.pack('<H', length))
 		buff.extend(color)
 
-		return self.send(self.writeHeader(buff))
+		return self.send(buff)
 
 
 	def setAllColor(self, color):
@@ -198,7 +185,7 @@ class LightProtocol:
 		light.extend(color)
 
 		buff = header + light
-		return self.send(self.writeHeader(buff))
+		return self.send(buff)
 
 	def clear(self):
 		"""
@@ -212,23 +199,26 @@ class LightProtocol:
 		header = bytearray()
 		header.append(0x03)
 
-		return self.send(self.writeHeader(header))
+		return self.send(header)
 
 	def setNumLeds(self, numLeds):
 		buff = bytearray()
 		buff.append(0x02)
 		buff.extend(struct.pack('<H', numLeds))
-		return self.send(self.writeHeader(buff))
+		return self.send(buff)
 
 	def setDebug(self, d):
 		buff = bytearray()
 		buff.append(0x05)
 		buff.append(int(d))
-		return self.send(self.writeHeader(buff))
+		return self.send(buff)
 
 	def parse(self, msg):
 		if not isinstance(msg, bytearray):
 			raise BadMessageTypeException()
+
+		if self.debug:
+			self.debug_print("message: {}".format(binascii.hexlify(msg)))
 
 		protocol_version = msg[0]
 		msg_length = struct.unpack('<H', msg[1:3])[0]
@@ -236,14 +226,13 @@ class LightProtocol:
 		if protocol_version != self.protocol_version:
 			raise IncompatibleProtocolException(protocol_version, self.protocol_version)
 
-		if self.debug:
-					self.debug_print("message: {}".format(binascii.hexlify(msg)))
+		msg = msg[3:] #remove header and process all commands in message:
 
 		while len(msg):
 			
-			cmd = msg[3]
+			cmd = msg[0]
 			if cmd in LightParser.commandsMap:
-				msg = LightParser.commandsMap[cmd](self, msg[3:])
+				msg = LightParser.commandsMap[cmd](self, msg)
 
 				if self.debug:
 					self.debug_print("remaining message: {}".format(binascii.hexlify(msg)))
@@ -257,7 +246,7 @@ class LightProtocol:
 
 		light = 3 #start at light at position 3 in the msg
 		for i in range(numlights):
-			id = struct.unpack('<H', msg[light:light+2])[0]
+			id = struct.unpack('<H', msg[light:light+2])[0]			
 
 			r = msg[light+2]
 			g = msg[light+3]
@@ -292,7 +281,7 @@ class LightProtocol:
 		g = msg[pos+1]
 		b = msg[pos+2]
 
-		for led in xrange(self.leds.ledArraySize):
+		for led in range(self.leds.ledArraySize):
 			self.leds.changeColor(led, (r, g, b))
 
 		return msg[4:]
@@ -324,17 +313,38 @@ class LightProtocol:
 
 class LightClientWss(Client, LightProtocol):
 
-	def __init__(self, host=None, port=None, retry = False, loop = None, debug = False):
+	def __init__(self, host=None, port=None, retry = False, loop = None, debug = False, fps = 60):
 		Client.__init__(self, retry = retry, loop = loop)
-		LightProtocol.__init__(self, debug=debug)
+		LightProtocol.__init__(self, debug = debug)
+
+		self.fps = fps
+		self.send_queue = asyncio.Queue()
 
 		self.debug = debug
 
 		if host and port:
 			self.connectTo(host, port, useSsl=False)
 
+		self.loop.create_task(self._process_send())
+
 	def send(self, msg):
-		self.sendBinaryMsg(bytes(msg))
+		self.send_queue.put_nowait(msg)
+
+	@asyncio.coroutine
+	def _process_send(self):
+		while True:
+
+			if self.send_queue.qsize():
+				msg = bytearray()
+
+				while self.send_queue.qsize() > 0:
+					i = self.send_queue.get_nowait()
+					msg.extend(i)
+
+				msg = self.writeHeader(msg)
+				self.sendBinaryMsg(bytes(msg))
+
+			yield from asyncio.sleep(1.0 / self.fps)
 
 class LightClient(LightProtocol, ReconnectAsyncio):
 	
@@ -356,7 +366,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 
 	@asyncio.coroutine
 	def _connect(self):
-		self.reader, self.writer = yield asyncio.From(asyncio.open_connection(self.addy, self.port))
+		self.reader, self.writer = yield from (asyncio.open_connection(self.addy, self.port))
 		protocol = self.writer.transport._protocol
 		protocol.connection_lost = self._onDisconnected
 		self.connected=True
@@ -389,7 +399,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			try:
 				#print("writing for realz")
 				self.writer.write(msg)
-				yield asyncio.From (self.writer.drain())
+				yield from self.writer.drain()
 			except TimeoutError:
 				self.connected = False
 				self._onDisconnected()
@@ -403,8 +413,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		def s():
 			try:
 				self.writer.write(msg)
-				#self.writer.drain()
-				yield asyncio.From (self.writer.drain())
+				yield from self.writer.drain()
 			
 			except TimeoutError:
 				self.connected = False
@@ -435,7 +444,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			self.onDisconnected()
 
 
-def test_protocol():
+def test_protocol(debug=False):
 
 	class TestClient(LightProtocol):
 		def __init__(self, num_lights=10):
@@ -444,10 +453,11 @@ def test_protocol():
 
 			from lights import LightArray2, OpenCvSimpleDriver
 			self.leds = LightArray2(num_lights, OpenCvSimpleDriver())
-			self.server = LightProtocol(self.leds, debug=True)
+			self.server = LightProtocol(self.leds, debug = debug)
 
 		def send(self, buffer):
-			self.server.parse(buffer)
+
+			self.server.parse(self.writeHeader(buffer))
 
 
 	num_lights = 10
@@ -460,22 +470,22 @@ def test_protocol():
 		print("============\n")
 
 		print("setColor: red")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (255, 0, 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 		print("setColor: green")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (0, 255, 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 		print("setColor: blue")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (0, 0, 255))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_clear():
@@ -483,7 +493,7 @@ def test_protocol():
 		print("==========\n")
 
 		c.clear()
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_set_all():
@@ -493,16 +503,16 @@ def test_protocol():
 		print("setAllColor: red")
 		c.setAllColor((255, 0 , 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 		print("setAllColor: green")
 		c.setAllColor((0, 255 , 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 		print("setAllColor: blue")
 		c.setAllColor((0, 0 , 255))
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_set_series():
@@ -519,38 +529,50 @@ def test_protocol():
 
 		print("red, blue, red")
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_multimsg():
 		print("test_multimsg")
 		print("============\n")
 
-		msg = '0101000301040006000064'
-		msg = bytearray(msg.decode('hex'))
+		#this message has clear [0x03] and set_all_colors [0x06]
+		msg = b'0306000064'
+		msg = bytearray(binascii.unhexlify(msg))
 
 		print("should be blueish...")
 
 		c.send(msg)
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
 
 		print("should be a rainbow")
 
-		msg = '013500010a000000ffff00010081ff00020000ff920300007bff04006a00ff05006100000600b500000700ff00000800ff00000900ff7700'
-		msg = bytearray(msg.decode('hex'))
+		msg = b'010a000000ffff00010081ff00020000ff920300007bff04006a00ff05006100000600b500000700ff00000800ff00000900ff7700'
+		msg = bytearray(binascii.unhexlify(msg))
 
 		c.send(msg)
-		yield asyncio.From(asyncio.sleep(5))
+		yield from (asyncio.sleep(5))
+
+
+		msg = b'0301010001008a006c0101000200170000010100040050003f0101000800c300000101000900e70000'
+		msg = bytearray(binascii.unhexlify(msg))
+
+		c.send(msg)
+		yield from (asyncio.sleep(5))
+
 
 	def test_debug():
 		print("test_debug")
 		print("============\n")
 
-		c.setDebug(1)
-		assert(c.server.debug)
+		c.setDebug(not debug)
+		assert(not c.server.debug)
 
 		print("pass")
+
+		#teardown:
+		c.setDebug(debug)
 
 	def test_setNumLeds():
 		print("test_setNumLeds")
@@ -587,7 +609,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	if args.test:
-		test_protocol()
+		test_protocol(debug=args.debug)
 		quit()
 
 		

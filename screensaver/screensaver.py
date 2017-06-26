@@ -1,9 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import photons
-from photons.lightclient import LightClient
 import random
-import trollius as asyncio
+import asyncio
 
 leds = None
 
@@ -114,7 +113,7 @@ def rainbow():
 
 		offset += 1
 
-		yield asyncio.From(asyncio.sleep(delay))
+		yield from asyncio.sleep(delay)
 
 @asyncio.coroutine
 def larsonScanner():
@@ -167,7 +166,7 @@ def larsonScanner():
 			led2 += 1
 
 
-		yield asyncio.From(asyncio.sleep(delay))
+		yield from asyncio.sleep(delay)
 
 @asyncio.coroutine
 def larsonScanner2():
@@ -220,7 +219,7 @@ def larsonScanner2():
 			led2 += 1
 
 
-		yield asyncio.From(asyncio.sleep(delay))
+		yield from asyncio.sleep(delay)
 
 
 @asyncio.coroutine

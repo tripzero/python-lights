@@ -1,4 +1,4 @@
-from lights import LightFpsController
+from photons import LightFpsController
 import numpy as np
 
 def invert_rows(img):
