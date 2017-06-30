@@ -392,7 +392,9 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			self.debug_print("not connected")
 			return
 		
-		self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
+		msg = self.writeHeader(msg)
+
+		#self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
 
 		@asyncio.coroutine
 		def s2():
