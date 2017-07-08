@@ -5,7 +5,7 @@ from wss.wssclient import ReconnectAsyncio, Client
 from collections import deque
 import binascii
 
-from lightprotocol import LightProtocol
+from photons import LightProtocol
 
 try:
 	range = xrange
