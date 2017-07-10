@@ -194,7 +194,7 @@ class ColorTransformAnimation(BaseAnimation):
 		self.debug=debug
 
 	def addAnimation(self, led, color, time, fromColor = None):
-		if not fromColor:
+		if  fromColor == None:
 			prevColor = self.leds.color(led)[:]
 		else:
 			prevColor = fromColor
