@@ -151,7 +151,6 @@ class SequentialAnimation(BaseAnimation):
 
 		animation = self.animations.pop(0)
 		self._do(animation).then(self._animationComplete)
-
 class ConcurrentAnimation(BaseAnimation):
 
 	def __init__(self):
@@ -348,7 +347,7 @@ class LightArray2(LightFpsController):
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
 
 	def clear(self):
-		self.ledsData[:] = (0,0,0)
+		self.ledsData[:] = [0,0,0]
 		self.update()
 
 	def changeColor(self, ledNumber, color):
