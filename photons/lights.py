@@ -71,7 +71,7 @@ class ColorTransform(Id):
 
 	def __init__(self, led, targetColor, startColor, redStep, blueStep, greenStep, num_frames):
 		Id.__init__(self)
-		self.startColor = (startColor[0], startColor[1], startColor[2])
+		self.startColor = np.array([float(startColor[0]), float(startColor[1]), float(startColor[2])])
 		self.led = led
 		self.targetColor = targetColor
 		self.redStep = redStep
@@ -79,10 +79,13 @@ class ColorTransform(Id):
 		self.blueStep = blueStep
 		self.steps = [self.redStep, self.greenStep, self.blueStep]
 		self.frame_index = 0
-		self.num_frames=num_frames
-		self.color = startColor
-		
+		self.num_frames = num_frames
+		self.color = np.array([float(startColor[0]), float(startColor[1]), float(startColor[2])])
+
 		self.promise = Promise()
+
+	def color_as_int(self):
+		return [int(self.color[0]), int(self.color[1]), int(self.color[2])]
 
 	def complete(self):
 		self.promise.call()
@@ -192,8 +195,14 @@ class ColorTransformAnimation(BaseAnimation):
 		self.animations = []
 		self.debug=debug
 
-	def addAnimation(self, led, color, time, fromColor = None):
-		if  fromColor == None:
+	def addAnimation(self, led, color, time, fromColor = []):
+
+		if self._check_animation_already_added(led):
+			if self.debug:
+				print("Can only support one ColorTransformAnimation per light")
+			return
+
+		if  not len(fromColor):
 			prevColor = self.leds.color(led)[:]
 		else:
 			prevColor = fromColor
@@ -216,7 +225,6 @@ class ColorTransformAnimation(BaseAnimation):
 		if self.debug:
 			print("color = {}, target = {}".format(prevColor, color))
 			print("num frames = {}".format(numFrames))
-			print("redSteps = {}".format(redSteps))	
 
 		if redSteps == 0 and color[0] != prevColor[0]:
 			redSteps = 1
@@ -228,6 +236,13 @@ class ColorTransformAnimation(BaseAnimation):
 
 		t = ColorTransform(led, color[:], prevColor, redSteps, blueSteps, greenSteps, math.floor(numFrames))
 		self.animations.append(t)
+
+	def _check_animation_already_added(self, led):
+		for animation in self.animations:
+			if animation.led == led:
+				return True
+
+		return False
 
 	def start(self):
 		#print("animation {} started".format(self))
@@ -242,9 +257,15 @@ class ColorTransformAnimation(BaseAnimation):
 
 		ret = False
 
+		if self.debug:
+			print("color a: {}".format(color))
+	
 		for c in range(3):
 			s = steps[c]
 			color[c] += s
+	
+		if self.debug:
+			print("color b: {}".format(color))
 
 		animation.frame_index += 1
 
@@ -253,8 +274,8 @@ class ColorTransformAnimation(BaseAnimation):
 			ret = True
 			animation.complete()
 
-		animation.color = color
-		self.leds.changeColor(animation.led, animation.color)
+		#animation.color = color
+		self.leds.changeColor(animation.led, animation.color_as_int())
 
 		if self.debug:
 			print("led = {}, color = {}. target = {}".format(animation.led, color, animation.targetColor))
