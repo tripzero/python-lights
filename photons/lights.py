@@ -1,7 +1,6 @@
 #/usr/bin/env python
 
 import numpy as np
-from gi.repository import GObject
 import trollius as asyncio
 import copy
 import math
@@ -14,7 +13,7 @@ class Id:
 		Id.staticId += 1
 
 class Promise:
-	
+
 	def __init__(self):
 		self.success = None
 		self.args = []
@@ -29,7 +28,7 @@ class Promise:
 
 		if not self.promise:
 			self.promise = Promise()
-		
+
 		return self.promise
 
 	def call(self):
@@ -82,7 +81,7 @@ class ColorTransform(Id):
 		self.frame_index = 0
 		self.num_frames=num_frames
 		self.color = startColor
-		
+
 		self.promise = Promise()
 
 	def complete(self):
@@ -94,7 +93,7 @@ class TransformToColor(Id):
 		Id.__init__(self)
 		self.led = led
 		self.targetColor = targetColor
-		
+
 		self.promise = Promise()
 
 	def complete(self):
@@ -183,10 +182,10 @@ class Delay(BaseAnimation):
 
 	def start(self):
 		asyncio.get_event_loop().create_task(self.do_sleep())
-		
+
 		return self.promise
 
-		
+
 class ColorTransformAnimation(BaseAnimation):
 	def __init__(self, leds, debug=False):
 		BaseAnimation.__init__(self)
@@ -200,7 +199,7 @@ class ColorTransformAnimation(BaseAnimation):
 		else:
 			prevColor = fromColor
 
-		
+
 		redDelta = color[0] - prevColor[0]
 		greenDelta = color[1] - prevColor[1]
 		blueDelta = color[2] - prevColor[2]
@@ -292,97 +291,6 @@ class ColorTransformAnimation(BaseAnimation):
 
 		self.promise.call()
 
-
-
-class LightArray:
-	ledArraySize = 0
-	ledsData = None
-	needsUpdate = False
-	fps = 30
-	driver = None
-
-	def __init__(self, ledArraySize, driver, fps=30):
-		self.setLedArraySize(ledArraySize)
-		self.driver = driver
-		self.fps = 30
-
-	def setLedArraySize(self, ledArraySize):
-		self.ledArraySize = ledArraySize
-		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
-
-	def clear(self):
-		self.ledsData[:] = [0,0,0]
-		self.update()
-
-	def update(self):
-		if self.needsUpdate == False:
-			GObject.timeout_add(1000/self.fps, self._doUpdate)
-		self.needsUpdate = True
-
-	def _doUpdate(self):
-		if self.needsUpdate == True:
-			self.driver.update(self.ledsData)
-			self.needsUpdate = False
-		return False
-
-	def changeColor(self, ledNumber, color):
-		self.ledsData[ledNumber] = color
-		self.update()
-
-	def chase(self, color, time, delay):
-		steps = time / delay
-		c = Chase(color, steps)
-		GObject.timeout_add(delay, self._doChase, c)
-		return c.promise
-
-	def _doChase(self, c):
-		if c.step >= c.steps:
-			c.promise.call()
-			return False
-		if c.led >= self.ledArraySize:
-			c.forward = False
-		if c.led <= 0:
-			c.forward = True
-		#restore previous led color
-		self.changeColor(c.led, c.prevColor)
-
-		if c.forward == True:
-			c.led += 1
-		else:
-			c.led -= 1
-
-		c.prevColor = self.ledsData[c.led]
-
-		self.changeColor(c.led, c.color)
-		c.step += 1
-
-		return True
-
-	def transformColorTo(self, led, color, time):
-		prevColor = self.ledsData[led]
-		steps = [color[0] - prevColor[0], color[1] - prevColor[1], color[2] - prevColor[2]]
-		stepsAbs = [abs(steps[0]), abs(steps[1]), abs(steps[2]), 1]
-		maxSteps = max(1, stepsAbs)
-		delay = time / maxSteps
-		t = TransformToColor(led, color)
-		GObject.timeout_add(delay, self._doTransformColorTo, t)
-		return t.promise
-
-	def _doTransformColorTo(self, transform):
-		stillTransforming = False
-		color = self.ledsData[transform.led]
-		for i in range(3):
-			if color[i] < transform.targetColor[i]:
-				color[i] += 1
-				stillTransforming = True
-			elif color[i] > transform.targetColor[i]:
-				color[i] -= 1
-				stillTransforming = True
-		self.ledsData[transform.led] = color
-		self.update()
-		if stillTransforming == False:
-			transform.complete()
-		return stillTransforming
 
 class LightFpsController:
 
