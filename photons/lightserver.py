@@ -4,14 +4,15 @@ from binascii import hexlify
 from wss.wssserver import Server, server_main
 
 class LightServerWss(Server):
-	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key"):
+	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key", debug=False):
 		self.leds = leds
 		self.port = port
 		self.iface = iface
 
-		self.parser = LightProtocol(self.leds)
+		self.parser = LightProtocol(self.leds, debug=debug)
 
 		Server.__init__(self, port = port, useSsl=useSsl, sslCert=sslCert, sslKey=sslKey)
+		self.debug = debug
 
 	def onBinaryMessage(self, msg, fromClient):
 		data = bytearray()
