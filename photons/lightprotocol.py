@@ -1,6 +1,7 @@
 import numpy as np
 import struct
 import binascii
+import sys
 
 class LightParser:
 
@@ -16,7 +17,7 @@ class LightParser:
 class IncompatibleProtocolException(Exception):
 	def __init__(self, protocol, should_be_protocol):
 		Exception.__init__(self)
-		print("protocol {} should be {}".format(protocol, should_be_protocol))
+		print("protocol '{}' should be '{}'".format(protocol, should_be_protocol))
 
 class BadMessageTypeException(Exception):
 	def __init__(self):
@@ -65,7 +66,7 @@ class LightProtocol:
 			for i in ledsData[index:]:
 				if not np.array_equal(color, i):
 					break
-				
+
 				length += 1
 
 			if length < 4:
@@ -101,7 +102,7 @@ class LightProtocol:
 		for i in range(len(diff)):
 			if not np.all(np.equal(diff[i], [0,0,0])):
 				self.setColor(i, ledsData[i])
-				
+
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
 	def writeHeader(self, msg):
@@ -123,7 +124,7 @@ class LightProtocol:
 		sets the color of a specific light
 
 		Data:
-		
+
 		[Command][Number_Lights_to_set][id_1][r][g][b][id_n][r][g][b]...
 		"""
 		header = bytearray()
@@ -143,7 +144,7 @@ class LightProtocol:
 		sets all lights in the series starting from "startId" to "endId" to "color"
 
 		Data:
-		[0x07][startId][length][r][g][b]		
+		[0x07][startId][length][r][g][b]
 		"""
 
 		buff = bytearray()
@@ -204,10 +205,15 @@ class LightProtocol:
 		if not isinstance(msg_b, bytearray):
 			raise BadMessageTypeException()
 
-		if self.debug:
-			self.debug_print("message: {}".format(binascii.hexlify(msg_b)))
+		msg = msg_b
 
-		msg = memoryview(msg_b)
+		if sys.version_info[0] == 3:
+			msg = memoryview(msg_b)
+
+		if self.debug:
+			self.debug_print("message: {}".format(binascii.hexlify(msg)))
+			self.debug_print("message: {}".format(msg_b))
+
 
 		protocol_version = msg[0]
 		msg_length = struct.unpack('<H', msg[1:3])[0]
@@ -218,7 +224,7 @@ class LightProtocol:
 		msg = msg[3:] #remove header and process all commands in message:
 
 		while len(msg):
-			
+
 			cmd = msg[0]
 			if cmd in LightParser.commandsMap:
 				msg = LightParser.commandsMap[cmd](self, msg)
@@ -235,7 +241,7 @@ class LightProtocol:
 
 		light = 3 #start at light at position 3 in the msg
 		for i in range(numlights):
-			id = struct.unpack('<H', msg[light:light+2])[0]			
+			id = struct.unpack('<H', msg[light:light+2])[0]
 
 			r = msg[light+2]
 			g = msg[light+3]

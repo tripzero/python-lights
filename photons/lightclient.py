@@ -1,36 +1,55 @@
 
 
 import trollius as asyncio
-
-import numpy as np
-import struct
-import binascii
 from wss.wssclient import ReconnectAsyncio, Client
-from lightprotocol import LightProtocol
+from collections import deque
+import binascii
+
+from photons import LightProtocol
 
 try:
 	range = xrange
 except:
 	pass
 
-#log.startLogging(sys.stdout)
 
 class LightClientWss(Client, LightProtocol):
 
-	def __init__(self, host=None, port=None, retry = False, loop = None, debug = False):
+	def __init__(self, host=None, port=None, retry = False, loop = None, debug = False, fps = 60):
 		Client.__init__(self, retry = retry, loop = loop)
-		LightProtocol.__init__(self, debug=debug)
+		LightProtocol.__init__(self, debug = debug)
+
+		self.fps = fps
+		self.send_queue = asyncio.Queue()
 
 		self.debug = debug
 
 		if host and port:
 			self.connectTo(host, port, useSsl=False)
 
+		self.loop.create_task(self._process_send())
+
 	def send(self, msg):
-		self.sendBinaryMsg(bytes(self.writeHeader(msg)))
+		self.send_queue.put_nowait(msg)
+
+	@asyncio.coroutine
+	def _process_send(self):
+		while True:
+
+			if self.send_queue.qsize():
+				msg = bytearray()
+
+				while self.send_queue.qsize() > 0:
+					i = self.send_queue.get_nowait()
+					msg.extend(i)
+
+				msg = self.writeHeader(msg)
+				self.sendBinaryMsg(bytes(msg))
+
+			yield asyncio.From(asyncio.sleep(1.0 / self.fps))
 
 class LightClient(LightProtocol, ReconnectAsyncio):
-	
+
 
 	def __init__(self, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, usingAsynioEventLoop=True):
 		LightProtocol.__init__(self)
@@ -75,14 +94,16 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			self.debug_print("not connected")
 			return
 		
-		self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
+		msg = self.writeHeader(msg)
+
+		#self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
 
 		@asyncio.coroutine
 		def s2():
 			try:
 				#print("writing for realz")
 				self.writer.write(msg)
-				yield asyncio.From (self.writer.drain())
+				yield asyncio.From(self.writer.drain())
 			except TimeoutError:
 				self.connected = False
 				self._onDisconnected()
@@ -96,8 +117,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 		def s():
 			try:
 				self.writer.write(msg)
-				#self.writer.drain()
-				yield asyncio.From (self.writer.drain())
+				yield asyncio.From(self.writer.drain())
 			
 			except TimeoutError:
 				self.connected = False
@@ -128,7 +148,7 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 			self.onDisconnected()
 
 
-def test_protocol():
+def test_protocol(debug=False):
 
 	class TestClient(LightProtocol):
 		def __init__(self, num_lights=10):
@@ -137,10 +157,11 @@ def test_protocol():
 
 			from lights import LightArray2, OpenCvSimpleDriver
 			self.leds = LightArray2(num_lights, OpenCvSimpleDriver())
-			self.server = LightProtocol(self.leds, debug=True)
+			self.server = LightProtocol(self.leds, debug = debug)
 
 		def send(self, buffer):
-			self.server.parse(buffer)
+
+			self.server.parse(self.writeHeader(buffer))
 
 
 	num_lights = 10
@@ -153,22 +174,22 @@ def test_protocol():
 		print("============\n")
 
 		print("setColor: red")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (255, 0, 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 		print("setColor: green")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (0, 255, 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 		print("setColor: blue")
-		for i in xrange(num_lights):
+		for i in range(num_lights):
 			c.setColor(i, (0, 0, 255))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_clear():
@@ -176,7 +197,7 @@ def test_protocol():
 		print("==========\n")
 
 		c.clear()
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_set_all():
@@ -186,16 +207,16 @@ def test_protocol():
 		print("setAllColor: red")
 		c.setAllColor((255, 0 , 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 		print("setAllColor: green")
 		c.setAllColor((0, 255 , 0))
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 		print("setAllColor: blue")
 		c.setAllColor((0, 0 , 255))
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_set_series():
@@ -212,38 +233,55 @@ def test_protocol():
 
 		print("red, blue, red")
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 	@asyncio.coroutine
 	def test_multimsg():
 		print("test_multimsg")
 		print("============\n")
 
-		msg = '0101000301040006000064'
-		msg = bytearray(msg.decode('hex'))
+		#this message has clear [0x03] and set_all_colors [0x06]
+		msg = b'0306000064'
+		msg = bytearray(binascii.unhexlify(msg))
 
 		print("should be blueish...")
 
 		c.send(msg)
 
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
 
 		print("should be a rainbow")
 
-		msg = '013500010a000000ffff00010081ff00020000ff920300007bff04006a00ff05006100000600b500000700ff00000800ff00000900ff7700'
-		msg = bytearray(msg.decode('hex'))
+		msg = b'010a000000ffff00010081ff00020000ff920300007bff04006a00ff05006100000600b500000700ff00000800ff00000900ff7700'
+		msg = bytearray(binascii.unhexlify(msg))
 
 		c.send(msg)
-		yield asyncio.From(asyncio.sleep(5))
+		yield asyncio.From (asyncio.sleep(5))
+
+
+		msg = b'0301010001008a006c0101000200170000010100040050003f0101000800c300000101000900e70000'
+		msg = bytearray(binascii.unhexlify(msg))
+
+		c.send(msg)
+		yield asyncio.From (asyncio.sleep(5))
+
 
 	def test_debug():
 		print("test_debug")
 		print("============\n")
 
-		c.setDebug(1)
-		assert(c.server.debug)
+		to_set=1
+
+		if debug:
+			to_set = 0
+
+		c.setDebug(to_set)
+		assert(c.server.debug == to_set)
 
 		print("pass")
+
+		#teardown:
+		c.setDebug(debug)
 
 	def test_setNumLeds():
 		print("test_setNumLeds")
@@ -280,7 +318,7 @@ if __name__ == "__main__":
 	args = parser.parse_args()
 
 	if args.test:
-		test_protocol()
+		test_protocol(debug=args.debug)
 		quit()
 
 		
