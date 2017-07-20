@@ -48,32 +48,45 @@ class LightClientWss(Client, LightProtocol):
 
 			yield from asyncio.sleep(1.0 / self.fps)
 
-class LightClient(LightProtocol, ReconnectAsyncio):
+class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 
 
-	def __init__(self, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, usingAsynioEventLoop=True):
-		LightProtocol.__init__(self)
+	def __init__(self, host=None, port=None, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, fps=60):
+		LightProtocol.__init__(self, debug = debug)
 		ReconnectAsyncio.__init__(self, retry=True)
 		self.reader = None
 		self.writer = None
 		self.loop = loop
 		self.debug = debug
 		self.connected = False
+		self.fps = fps
 
 		self.onConnected = onConnected
 		self.onDisconnected = onDisconnected
-		self.usingAsynioEventLoop = usingAsynioEventLoop
-		if self.debug:
-			self.log = open("lightclient.log", "w")
+
+		self.send_queue = asyncio.Queue()
+
+		self.loop.create_task(self._process_send())
+
+		if host and port:
+			self.connectTo(host, port)
 
 	@asyncio.coroutine
 	def _connect(self):
-		self.reader, self.writer = yield from (asyncio.open_connection(self.addy, self.port))
-		protocol = self.writer.transport._protocol
-		protocol.connection_lost = self._onDisconnected
+		yield from asyncio.get_event_loop().create_connection(lambda: self,
+			self.addy, self.port)
+	
+	def connection_made(self, transport):
+		self.writer = transport
 		self.connected=True
 		if self.onConnected:
 			self.onConnected()
+
+	def connection_lost(self, exc):
+		self._onDisconnected()
+
+	def data_received(self, data):
+		pass
 
 	def connectTo(self, addy, port):
 		self.addy = addy
@@ -85,54 +98,26 @@ class LightClient(LightProtocol, ReconnectAsyncio):
 
 	def debug_print(self, msg):
 		if self.debug:
-			self.log.write(msg)
-			self.log.write("\n")
+			print(msg)
 
 	def send(self, msg):
+		self.send_queue.put_nowait(msg)
 
-		if not self.connected:
-			self.debug_print("not connected")
-			return
-		
-		msg = self.writeHeader(msg)
+	@asyncio.coroutine
+	def _process_send(self):
+		while True:
 
-		#self.debug_print("writing to {}: {}".format(self.addy, binascii.hexlify(msg)))
+			if self.connected and self.send_queue.qsize():
+				msg = bytearray()
 
-		@asyncio.coroutine
-		def s2():
-			try:
-				#print("writing for realz")
+				while self.send_queue.qsize() > 0:
+					i = self.send_queue.get_nowait()
+					msg.extend(i)
+
+				msg = self.writeHeader(msg)
 				self.writer.write(msg)
-				yield from self.writer.drain()
-			except TimeoutError:
-				self.connected = False
-				self._onDisconnected()
-			except:
-				import traceback, sys
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-				traceback.print_exception(exc_type, exc_value, exc_traceback,
-		                      limit=8, file=sys.stdout)
 
-		def s():
-			try:
-				self.writer.write(msg)
-				yield from self.writer.drain()
-			
-			except TimeoutError:
-				self.connected = False
-				self._onDisconnected()
-			except:
-				import traceback, sys
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-				traceback.print_exception(exc_type, exc_value, exc_traceback,
-		                      limit=8, file=sys.stdout)
-		
-		if self.usingAsynioEventLoop:
-			s()
-		else:
-			self.loop.run_until_complete(s2())
+			yield from asyncio.sleep(1.0 / self.fps)
 		
 	def _onConnected(self):
 		if self.onConnected:
@@ -265,6 +250,12 @@ def test_protocol(debug=False):
 		c.send(msg)
 		yield from (asyncio.sleep(5))
 
+		msg = b'0301040006000064'
+		msg = bytearray(binascii.unhexlify(msg))
+
+		c.send(msg)
+		yield from (asyncio.sleep(5))
+
 
 	def test_debug():
 		print("test_debug")
@@ -331,7 +322,7 @@ if __name__ == "__main__":
 	def onConnected():
 		print("client onConnected:")
 		client.clear()
-		client.setAllColor((0, 0, 100))
+		client.setAllColor([0, 0, 100])
 
 	if args.wss:
 		client.setOpenHandler(onConnected)

@@ -26,6 +26,9 @@ class BadMessageTypeException(Exception):
 class InvalidCommandException(Exception):
 	pass
 
+class InvalidMessageLength(Exception):
+	pass
+
 class LightProtocol:
 	"""
 		Light protocol follows the following frame/payload structure:
@@ -45,7 +48,7 @@ class LightProtocol:
 	"""
 	ledsDataCopy = None
 
-	def __init__(self, leds=None, debug = 0):
+	def __init__(self, leds=None, debug = False):
 		"""leds = LightArray2 handle.  This is only used when trying to parse."""
 		self.leds = leds
 		self.protocol_version = 0x01 #version 1.0
@@ -208,7 +211,10 @@ class LightProtocol:
 		if self.debug:
 			self.debug_print("message: {}".format(binascii.hexlify(msg_b)))
 
-		msg = memoryview(msg_b)
+		print("message: {}".format(binascii.hexlify(msg_b)))
+
+		#msg = memoryview(msg_b)
+		msg = msg_b
 
 		protocol_version = msg[0]
 		msg_length = struct.unpack('<H', msg[1:3])[0]
@@ -217,6 +223,10 @@ class LightProtocol:
 			raise IncompatibleProtocolException(protocol_version, self.protocol_version)
 
 		msg = msg[3:] #remove header and process all commands in message:
+
+		if len(msg) < msg_length:
+			raise InvalidMessageLength()
+
 
 		while len(msg):
 			
@@ -231,7 +241,8 @@ class LightProtocol:
 
 	@LightParser.command(0x01)
 	def parseSetColor(self, msg):
-		cmd = msg[0]
+		assert(len(msg) >= 6)
+
 		numlights = struct.unpack('<H', msg[1:3])[0]
 
 		light = 3 #start at light at position 3 in the msg
@@ -242,7 +253,7 @@ class LightProtocol:
 			g = msg[light+3]
 			b = msg[light+4]
 
-			self.leds.changeColor(id, (r, g, b))
+			self.leds.changeColor(id, [r, g, b])
 
 			light += 5 #5 bytes per light
 
@@ -272,7 +283,7 @@ class LightProtocol:
 		b = msg[pos+2]
 
 		for led in range(self.leds.ledArraySize):
-			self.leds.changeColor(led, (r, g, b))
+			self.leds.changeColor(led, [r, g, b])
 
 		return msg[4:]
 
@@ -287,7 +298,7 @@ class LightProtocol:
 
 		i = start_id
 		while i < start_id + numlights:
-			self.leds.changeColor(i, (r, g, b))
+			self.leds.changeColor(i, [r, g, b])
 			i += 1
 
 		return msg[8:]
@@ -297,6 +308,6 @@ class LightProtocol:
 	def parseSetDebug(self, msg):
 		debug = msg[1]
 
-		self.debug = debug
+		self.debug = debug == 1
 
 		return msg[2:]

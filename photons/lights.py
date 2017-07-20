@@ -4,6 +4,7 @@ import numpy as np
 import asyncio
 import copy
 import math
+from array import array
 
 class Id:
 	id = None
@@ -510,7 +511,7 @@ class Apa102Driver:
 
 	def update(self, ledsData):
 		data = bytearray()
-		data[:4] = self.header
+		data.extend(self.header)
 		po = self.pixel_order
 		brightness = self._brightness_5bit
 
@@ -551,8 +552,8 @@ class OpenCvSimpleDriver:
 		height = self.size
 
 		if len(ledsData) > self.wrap:
-			width = self.wrap * self.size
-			height = self.size * len(ledsData) / self.wrap
+			width = int(self.wrap * self.size)
+			height = int(self.size * len(ledsData) / self.wrap)
 
 
 		if not isinstance(self.image, list):
@@ -680,7 +681,7 @@ def getDriver(driverName = None):
 	except ImportError:
 		from photons import LightClient, LightClientWss
 
-	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightProtocol" : LightClient, 
+	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightClient" : LightClient, 
 				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver , "LightClientWss" : LightClientWss}
 
 	if driverName and driverName in drivers:

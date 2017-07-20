@@ -44,7 +44,7 @@ class LightServerWss(Server):
 			yield from asyncio.sleep(1/self.leds.fps)
 
 
-class LightServer():
+class LightServer(asyncio.Protocol):
 
 	def __init__(self, leds, port, iface = "localhost", debug=False, **kwargs):
 
@@ -52,50 +52,54 @@ class LightServer():
 		self.port = port
 		self.iface = iface
 		self.debug = debug
+		self.parser = LightProtocol(leds = self.leds, debug = debug)
+		self.queue = asyncio.Queue(maxsize = self.leds.fps * 5)
+
+		asyncio.get_event_loop().create_task(self._processQueue())
 
 	def start(self):
 		loop = asyncio.get_event_loop()
 
-		factory = asyncio.start_server(self.new_connection, host = self.iface, port = self.port)
+		factory = loop.create_server(lambda: self,
+			host = self.iface, port = self.port)
+
 		self.server = loop.run_until_complete(factory)
 
-		self.parser = LightProtocol(self.leds)
-
-		self.client_reader = None
 
 	def print_debug(self, msg):
 		if self.debug:
 			print(msg)
 
-	def new_connection(self, client_reader, client_writer):
+	def connection_made(self, transport):
 		#we may have only one client
 		try:
 			self.print_debug("new connection!")
 
-			self.client_reader = client_reader
-
-			while True:
-
-				self.print_debug("reading data...")
-				data = yield from self.client_reader.read()
-
-				if data:
-					buff = bytearray()
-					buff.extend(data)
-					self.print_debug("can_has_data!!!")
-					self.print_debug("length: {}".format(len(data)))
-					self.print_debug("data: {}".format(hexlify(data)))
-					self.parser.parse(buff)
-
-				else:
-					return
-
+			self.client_writer = transport
+		
 		except:
 			import traceback, sys
 			exc_type, exc_value, exc_traceback = sys.exc_info()
 			traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
 			traceback.print_exception(exc_type, exc_value, exc_traceback,
 	                      limit=8, file=sys.stdout)
+
+	def data_received(self, data):
+		self.print_debug("new data received")
+		
+		try:
+			self.queue.put_nowait(bytearray(data))
+		except asyncio.QueueFull:
+			pass #drop message
+
+	@asyncio.coroutine
+	def _processQueue(self):
+		while True:
+
+			data = yield from self.queue.get()
+			self.parser.parse(data)
+
+			yield from asyncio.sleep(1/self.leds.fps)
 
 	def close():
 		self.server.close()
