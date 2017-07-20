@@ -454,13 +454,23 @@ class PixelFormat:
 	bgr = [2, 1, 0]
 	rbg = [0, 2, 1]
 
+class FakeSpi:
+	def write(self, data):
+		pass
 
 class Apa102Driver:
 
 	def __init__(self, freqs=1000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
-		import mraa
-		self.spiDev = mraa.Spi(0)
-		self.spiDev.frequency(freqs)
+		
+		try:
+			import mraa
+			self.spiDev = mraa.Spi(0)
+			self.spiDev.frequency(freqs)
+		except:
+			print("Apa102Driver: SPI not available.  Using FakeSPI")
+			self.spiDev = FakeSpi()
+
+		# Global brightness setting 0-100%
 		self.brightness = brightness
 
 		"""
@@ -470,9 +480,19 @@ class Apa102Driver:
 		"""
 		self.pixel_order = pixel_order
 
-	def setGlobalBrightness(self, brightness):
+		#Constant data structures:
+		self.header = [0x00, 0x00, 0x00, 0x00]
+		self.end_frame = [0xff, 0xff, 0xff, 0xff]
+
+	@property
+	def brightness(self):
+		return self._brightness
+
+	@brightness.setter
+	def brightness(self, brightness):
 		if brightness >= 0 and brightness <= 100:
-			self.brightness = brightness
+			self._brightness = brightness
+			self._brightness_5bit = self._calcGlobalBrightness(brightness)
 		else:
 			print("brightness is out of range (0-100)")
 
@@ -490,15 +510,17 @@ class Apa102Driver:
 
 	def update(self, ledsData):
 		data = bytearray()
-		data[:4] = [0x00, 0x00, 0x00, 0x00]
+		data[:4] = self.header
 		po = self.pixel_order
+		brightness = self._brightness_5bit
+
 		for rgb in ledsData:
-			data.append(self._calcGlobalBrightness(self.brightness))
+			data.append(brightness)
 			# write pixel data
 			data.extend([rgb[po[0]], rgb[po[1]], rgb[po[2]]])
 
 		#endframe
-		data.extend([0xff, 0xff, 0xff, 0xff])
+		data.extend(self.end_frame)
 
 		self.spiDev.write(data)
 
