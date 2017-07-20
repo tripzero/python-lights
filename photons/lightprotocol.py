@@ -50,6 +50,7 @@ class LightProtocol:
 		self.leds = leds
 		self.protocol_version = 0x01 #version 1.0
 		self.debug = debug
+		self.compression = False
 
 	def debug_print(self, msg):
 		if self.debug:
@@ -83,12 +84,12 @@ class LightProtocol:
 			self.setAllColor(ledsData[0])
 			return
 
-		stdDev = np.std(ledsData)
+		if self.compression:
+			stdDev = np.std(ledsData)
 
-		"""if stdDev < len(ledsData) / 4:
-			" if there's a lot of common data, we can compress the stream and break up the packets "
-			return self.updateCompress(ledsData)
-		"""
+			if stdDev < len(ledsData) / 4:
+				" if there's a lot of common data, we can compress the stream and break up the packets "
+				return self.updateCompress(ledsData)
 
 		if self.ledsDataCopy is None:
 			self.ledsDataCopy = np.array(ledsData, copy=True)
