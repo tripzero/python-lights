@@ -441,8 +441,6 @@ class LightArray2(LightFpsController):
 
 
 class Ws2801Driver:
-	spiDev = None
-
 	def __init__(self, debug=None):
 		import mraa
 		self.spiDev = mraa.Spi(0)
@@ -451,7 +449,7 @@ class Ws2801Driver:
 		self.spiDev.write(bytearray(np.getbuffer(ledsData)))
 
 class PixelFormat:
-	gbr =	[1, 2, 0]
+	gbr = [1, 2, 0]
 	bgr = [2, 1, 0]
 	rbg = [0, 2, 1]
 
@@ -461,7 +459,7 @@ class FakeSpi:
 
 class Apa102Driver:
 
-	def __init__(self, freqs=1000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
+	def __init__(self, freqs=8000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
 		
 		try:
 			import mraa
@@ -483,7 +481,10 @@ class Apa102Driver:
 
 		#Constant data structures:
 		self.header = [0x00, 0x00, 0x00, 0x00]
-		self.end_frame = [0xff, 0xff, 0xff, 0xff]
+		self.numLeds = None
+
+	def _end_frame(self):
+		return [0x00] * (self.numLeds + 15 // 16)
 
 	@property
 	def brightness(self):
@@ -507,9 +508,12 @@ class Apa102Driver:
 		return msb | brightness
 
 	def power(self, ledsData):
-		return np.sum((ledsData / (255, 255, 255) * 0.2))
+		return np.sum((ledsData / [255, 255, 255] * 0.2))
 
 	def update(self, ledsData):
+		if self.numLeds == None:
+			self.numLeds = len(ledsData)
+
 		data = bytearray()
 		data.extend(self.header)
 		po = self.pixel_order
@@ -521,7 +525,7 @@ class Apa102Driver:
 			data.extend([rgb[po[0]], rgb[po[1]], rgb[po[2]]])
 
 		#endframe
-		data.extend(self.end_frame)
+		data.extend(self._end_frame())
 
 		self.spiDev.write(data)
 
