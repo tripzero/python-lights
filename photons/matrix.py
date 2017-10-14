@@ -38,14 +38,15 @@ class Matrix(LightFpsController):
 		return self.ledsData[led_index]
 
 	def colorMatrix(self, x, y):
-		return self.ledsData[x + (y * self.width)]
+		return self.ledsData[x + (y * self.width) - 1]
 
 	def changeColor(self, led_index, color):
 		self.ledsData[led_index] = color
 		self.update()
 
 	def changeColorMatrix(self, x, y, color):
-		self.ledsData[x + (y * self.width)] = color
+		pos = x + (y * self.width) - 1
+		self.ledsData[pos] = color
 		self.update()
 
 	def clear(self):
