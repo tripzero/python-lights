@@ -15,11 +15,12 @@ def invert_rows(img):
 
 class Matrix(LightFpsController):
 
-	def __init__(self, driver=None, width=16, height=9):
-		LightFpsController.__init__(self, driver=driver)
+	def __init__(self, driver=None, width=16, height=9, fps=30):
+		LightFpsController.__init__(self, driver = driver, fps = fps)
 		self.height = height
 		self.width = width
 		self.ledsData = np.zeros((height*width, 3), np.uint8)
+		self.ledArraySize = width * height
 
 	def update(self, frame=None):
 		if frame is not None:
@@ -29,8 +30,19 @@ class Matrix(LightFpsController):
 
 		LightFpsController.update(self)
 
-	def changeColor(self, x, y, color):
-		self.ledsData[x*y] = color
+	def color(self, led_index):
+		return self.ledsData[led_index]
+
+	def colorMatrix(self, x, y):
+		return self.ledsData[x + (y * self.width)]
+
+	def changeColor(self, led_index, color):
+		self.ledsData[led_index] = color
+		self.update()
+
+	def changeColorMatrix(self, x, y, color):
+		self.ledsData[x + (y * self.width)] = color
+		self.update()
 
 	def clear(self):
 		self.ledsData[:] = [0, 0, 0]
