@@ -33,5 +33,5 @@ class Matrix(LightFpsController):
 		self.ledsData[x*y] = color
 
 	def clear(self):
-		self.ledsData[:] = (0,0,0)
+		self.ledsData[:] = [0, 0, 0]
 		self.update()
