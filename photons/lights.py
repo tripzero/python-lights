@@ -546,6 +546,7 @@ class OpenCvSimpleDriver:
 		y = 0
 
 		for color in ledsData:
+			#print("color = {}".format(color))
 			self.image[y : y + self.size, x : x + self.size] = color[::-1]
 			x += self.size
 			i += 1

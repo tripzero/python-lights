@@ -26,11 +26,12 @@ class Matrix(LightFpsController):
 	def update(self, frame=None):
 		if frame is not None:
 			h, w, l = frame.shape
-			frame = np.reshape(frame, (h*w, 3))
-			self.ledsData = frame
+			self.ledsData = np.reshape(frame, (h*w, 3))
 
 		if self.invert_rows_on_update:
-			frame = invert_rows(self.ledsData)
+			frame = np.reshape(self.ledsData, (self.height, self.width, 3))		
+			frame = invert_rows(frame)
+			frame = np.reshape(frame, (self.height * self.width, 3))
 
 		LightFpsController.update(self, frame)
 
