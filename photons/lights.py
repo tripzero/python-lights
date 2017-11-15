@@ -86,7 +86,7 @@ class ColorTransform(Id):
 		self.promise = Promise()
 
 	def color_as_int(self):
-		return [int(self.color[0]), int(self.color[1]), int(self.color[2])]
+		return [int(math.floor(self.color[0])), int(math.floor(self.color[1])), int(math.floor(self.color[2]))]
 
 	def complete(self):
 		self.promise.call()
@@ -155,6 +155,8 @@ class SequentialAnimation(BaseAnimation):
 
 		animation = self.animations.pop(0)
 		self._do(animation).then(self._animationComplete)
+
+
 class ConcurrentAnimation(BaseAnimation):
 
 	def __init__(self):
@@ -554,6 +556,8 @@ class OpenCvSimpleDriver:
 				y += self.size
 				x = 0
 				i = 0
+
+		print("watching pixel: {}".format(ledsData[25]))
 
 		self.imshow("output", self.image)
 
