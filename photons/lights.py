@@ -557,8 +557,6 @@ class OpenCvSimpleDriver:
 				x = 0
 				i = 0
 
-		print("watching pixel: {}".format(ledsData[25]))
-
 		self.imshow("output", self.image)
 
 	@asyncio.coroutine
