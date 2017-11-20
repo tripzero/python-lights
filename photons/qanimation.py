@@ -41,13 +41,17 @@ class QColorObject(qcore.QObject):
 
 class QColorTransform(BaseAnimation):
 
+	_static_animation_tracker = []
+
 	def __init__(self, leds, debug=False):
 		BaseAnimation.__init__(self)
 		self.leds = leds
 		self.debug = debug
 		self.animations = qcore.QParallelAnimationGroup()
 
+		QColorTransform._static_animation_tracker.append(self)
 		self.animations.finished.connect(self.finished)
+		self.animations.finished.connect(lambda: QColorTransform._static_animation_tracker.remove(self))
 
 
 	def addAnimation(self, led, color, time, fromColor = []):
@@ -85,11 +89,14 @@ if __name__ == "__main__":
 	driver = lights.DummyDriver()
 	leds = lights.LightArray2(10, driver)
 
-	xform = QColorTransform(leds)
+	def transform():
+		xform = QColorTransform(leds)
 
-	xform.addAnimation(0, [255, 255, 255], 10000)
+		xform.addAnimation(0, [255, 255, 255], 10000)
 
-	xform.start().then(lambda: print("final color: {}".format(leds.color(0)))).then(sys.exit, 0)
+		xform.start().then(lambda: print("final color: {}".format(leds.color(0)))).then(sys.exit, 0)
+
+	transform()
 
 	asyncio.get_event_loop().run_forever()
 
