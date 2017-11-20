@@ -34,7 +34,7 @@ class QColorObject(qcore.QObject):
 	@color.setter
 	def color(self, value):
 		self._color = value
-		leds.changeColor(self.index, [self._color.red(), self._color.green(), self._color.blue()])
+		self.leds.changeColor(self.index, [self._color.red(), self._color.green(), self._color.blue()])
 
 
 
@@ -58,7 +58,6 @@ class QColorTransform(BaseAnimation):
 
 		color_animation = QColorObject(led, self.leds)
 
-		print("setting {} to {}".format("color", color))
 		animation = qcore.QPropertyAnimation(color_animation, bytes("color", 'utf-8'))
 		animation.setDuration(time)
 		animation.setStartValue(QColor(prevColor[0], prevColor[1], prevColor[2]))
