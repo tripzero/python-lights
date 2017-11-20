@@ -11,14 +11,16 @@ import signal
 
 def sigint_handler(*args):
 	qcore.QCoreApplication.quit()
+	sys.exit(0)
 
-signal.signal(signal.SIGINT, sigint_handler)
 
 def init_event_loop(app = qcore.QCoreApplication(sys.argv)):
 	loop = QEventLoop(app)
 	asyncio.set_event_loop(loop)
+	signal.signal(signal.SIGINT, sigint_handler)
 
 	return loop
+
 
 class QColorObject(qcore.QObject):
 	def __init__(self, index, leds):
@@ -35,7 +37,6 @@ class QColorObject(qcore.QObject):
 	def color(self, value):
 		self._color = value
 		self.leds.changeColor(self.index, [self._color.red(), self._color.green(), self._color.blue()])
-
 
 
 class QColorTransform(BaseAnimation):
@@ -65,9 +66,11 @@ class QColorTransform(BaseAnimation):
 
 		self.animations.addAnimation(animation)
 
+
 	def start(self):
 		self.animations.start()
 		return self.promise
+
 
 	def finished(self):
 		self.promise.call()
@@ -75,7 +78,7 @@ class QColorTransform(BaseAnimation):
 
 if __name__ == "__main__":
 
-	import lights
+	import photons as lights
 
 	init_event_loop()
 
