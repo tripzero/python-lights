@@ -1,5 +1,6 @@
 import PyQt5.QtCore as qcore
 from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import QApplication
 import asyncio
 import sys
 
@@ -14,7 +15,7 @@ def sigint_handler(*args):
 	sys.exit(0)
 
 
-def init_event_loop(app = qcore.QApplication(sys.argv)):
+def init_event_loop(app = QApplication(sys.argv)):
 	loop = QEventLoop(app)
 	asyncio.set_event_loop(loop)
 	signal.signal(signal.SIGINT, sigint_handler)
