@@ -15,10 +15,25 @@ class Id:
 
 class Promise:
 	
+	_id_count = 0
+	_promise_manager = []
+
 	def __init__(self):
 		self.success = None
 		self.args = []
 		self.promise = None
+		self.id = Promise._id_count
+
+		Promise._id_count += 1
+
+		Promise._promise_manager.append(self)
+
+		#print("({}) promise created: {}".format(self.id, self.success))
+
+
+	def __del__(self):
+		pass
+		#print("({}) promise deleted: {}".format(self.id, self.success))
 
 	def then(self, successCb, *args):
 
@@ -37,6 +52,8 @@ class Promise:
 		if self.success == None:
 			return
 
+		#print("({}) calling promise: {}".format(self.id, self.success))
+
 		if len(self.args):
 			ret = self.success(*self.args)
 		else:
@@ -49,12 +66,15 @@ class Promise:
 			#print("promise future return value not a promise")
 			self.promise.call()
 
+		#this queues up the cleanup after promise.call
+		asyncio.get_event_loop().call_soon(Promise._promise_manager.remove, self)
+
 
 class Chase(Id):
 	steps = 0
 	step = 0
 	led = 0
-	color = (0,0,0)
+	color = [0, 0, 0]
 	forward = True
 	promise = None
 	prevColor = (0,0,0)
@@ -114,6 +134,7 @@ class BaseAnimation:
 	def __init__(self):
 		self.animations = []
 		self.promise = Promise()
+		self.running = False
 
 	def addAnimation(self, animation, *args):
 		if len(args) == 0:
@@ -135,6 +156,9 @@ class BaseAnimation:
 			return methodCall()
 		else:
 			return methodCall(*args)
+
+	def start(self):
+		self.running = True
 
 class SequentialAnimation(BaseAnimation):
 
@@ -248,6 +272,7 @@ class ColorTransformAnimation(BaseAnimation):
 		return False
 
 	def start(self):
+		BaseAnimation.start(self)
 		#print("animation {} started".format(self))
 		asyncio.get_event_loop().create_task(self._run())
 
@@ -315,6 +340,7 @@ class ColorTransformAnimation(BaseAnimation):
 			print("animation {} is complete. Calling promise".format(self))
 
 		self.promise.call()
+		self.running = False
 
 class LightFpsController:
 
@@ -371,7 +397,7 @@ class LightArray2(LightFpsController):
 		self.ledsData = np.zeros((ledArraySize, 3), np.uint8)
 
 	def clear(self):
-		self.ledsData[:] = [0,0,0]
+		self.ledsData[:] = [0, 0, 0]
 		self.update()
 
 	def changeColor(self, ledNumber, color):

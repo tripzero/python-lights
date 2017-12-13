@@ -14,7 +14,7 @@ def sigint_handler(*args):
 	sys.exit(0)
 
 
-def init_event_loop(app = qcore.QCoreApplication(sys.argv)):
+def init_event_loop(app = qcore.QApplication(sys.argv)):
 	loop = QEventLoop(app)
 	asyncio.set_event_loop(loop)
 	signal.signal(signal.SIGINT, sigint_handler)
@@ -45,14 +45,20 @@ class QColorTransform(BaseAnimation):
 
 	def __init__(self, leds, debug=False):
 		BaseAnimation.__init__(self)
+
 		self.leds = leds
 		self.debug = debug
 		self.animations = qcore.QParallelAnimationGroup()
 
 		QColorTransform._static_animation_tracker.append(self)
 		self.animations.finished.connect(self.finished)
-		self.animations.finished.connect(lambda: QColorTransform._static_animation_tracker.remove(self))
+		
+		print("QColorTransform started")
 
+
+	def __del__(self):
+		print("removing QParallelAnimationGroup")
+		del self.animations
 
 	def addAnimation(self, led, color, time, fromColor = []):
 
@@ -78,7 +84,8 @@ class QColorTransform(BaseAnimation):
 
 	def finished(self):
 		self.promise.call()
-
+		QColorTransform._static_animation_tracker.remove(self)
+		print("QColorTransform._static_animation_tracker: {}".format(len(QColorTransform._static_animation_tracker)))
 
 if __name__ == "__main__":
 
