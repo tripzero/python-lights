@@ -695,12 +695,13 @@ class DummyDriver:
 
 def getDriver(driverName = None):
 	try:
-		from lights.lightclient import LightClient, LightClientWss
+		from lights.lightclient import LightClient, LightClientWss, LightClientUdp
 	except ImportError:
-		from photons import LightClient, LightClientWss
+		from photons import LightClient, LightClientWss, LightClientUdp
 
 	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightClient" : LightClient, 
-				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver , "LightClientWss" : LightClientWss}
+				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver , "LightClientWss" : LightClientWss,
+				"LightClientUdp" : LightClientUdp}
 
 	if driverName and driverName in drivers:
 		return drivers[driverName]
