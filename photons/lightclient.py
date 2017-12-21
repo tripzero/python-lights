@@ -133,6 +133,35 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 			self.onDisconnected()
 
 
+class LightClientUdp(LightClient):
+	def __init__(self, *args, **kwargs):
+		LightClient.__init__(self, *args, **kwargs)
+
+	def error_received(self, *args):
+		print("udp error recieved... {}".format(args))
+
+	@asyncio.coroutine
+	def _connect(self):
+		yield from asyncio.get_event_loop().create_datagram_endpoint(lambda: self,
+			remote_addr=(self.addy, self.port))
+
+	@asyncio.coroutine
+	def _process_send(self):
+		while True:
+
+			if self.connected and self.send_queue.qsize():
+				msg = bytearray()
+
+				while self.send_queue.qsize() > 0:
+					i = self.send_queue.get_nowait()
+					msg.extend(i)
+
+				msg = self.writeHeader(msg)
+				self.writer.sendto(msg)
+
+			yield from asyncio.sleep(1.0 / self.fps)
+
+
 def test_protocol(debug=False):
 
 	class TestClient(LightProtocol):
@@ -304,6 +333,7 @@ if __name__ == "__main__":
 	parser.add_argument('--test', dest="test", help="self test", action="store_true")
 	parser.add_argument('--num', dest="numLeds", help="number of leds", type=int)
 	parser.add_argument('--wss', dest="wss", help="use wss socket", action="store_true")
+	parser.add_argument('--udp', dest="udp", help="use udp socket", action="store_true")
 	parser.add_argument('address', help="address", default="localhost", nargs="?")
 	parser.add_argument('port', help="port", default=1888, nargs="?")
 	args = parser.parse_args()
@@ -314,10 +344,12 @@ if __name__ == "__main__":
 
 		
 	client = None
-	if not args.wss:
-		client = LightClient(debug=args.debug)
-	else:
+	if args.wss:
 		client = LightClientWss(debug=args.debug)
+	elif args.udp:
+		client = LightClientUdp(debug=args.debug)
+	else:
+		client = LightClient(debug=args.debug)
 
 	def onConnected():
 		print("client onConnected:")

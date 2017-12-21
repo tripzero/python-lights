@@ -446,12 +446,17 @@ class LightArray2(LightFpsController):
 
 
 class Ws2801Driver:
-	def __init__(self, debug=None):
-		import mraa
-		self.spiDev = mraa.Spi(0)
+	def __init__(self, freqs=800000, debug=None):
+		try:
+			import mraa
+			self.spiDev = mraa.Spi(0)
+			self.spiDev.frequency(freqs)
+		except:
+			print("Ws2801Driver: SPI not available.  Using FakeSPI")
+			self.spiDev = FakeSpi()
 
 	def update(self, ledsData):
-		self.spiDev.write(bytearray(np.getbuffer(ledsData)))
+		self.spiDev.write(bytearray(ledsData.tobytes()))
 
 class PixelFormat:
 	gbr = [1, 2, 0]
@@ -584,6 +589,9 @@ class OpenCvSimpleDriver:
 				i = 0
 
 		self.imshow("output", self.image)
+
+		if not asyncio.get_event_loop().is_running():
+			self.waitKey(1)
 
 	@asyncio.coroutine
 	def process_cv2_mainloop(self):

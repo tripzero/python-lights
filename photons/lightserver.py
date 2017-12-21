@@ -106,6 +106,22 @@ class LightServer(asyncio.Protocol):
 		asyncio.get_event_loop().run_until_complete(self.server.wait_closed())
 
 
+class LightServerUdp(LightServer):
+
+	def __init__(self, *args, **kwargs):
+		LightServer.__init__(self, *args, **kwargs)
+
+	def start(self):
+		loop = asyncio.get_event_loop()
+
+		factory = loop.create_datagram_endpoint(lambda: self,
+			local_addr = (self.iface, self.port))
+
+		self.server, protocol = loop.run_until_complete(factory)
+
+	def datagram_received(self, data, addr):
+		LightServer.data_received(self, data)
+
 
 if __name__ == "__main__":
 	from photons import LightArray2, OpenCvSimpleDriver, DummyDriver
@@ -114,6 +130,7 @@ if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--wss', dest="wss", help="use wss.", action='store_true')
+	parser.add_argument('--udp', dest="udp", help="use udp.", action='store_true')
 
 	args, unknown = parser.parse_known_args()
 
@@ -125,6 +142,9 @@ if __name__ == "__main__":
 
 	if args.wss:
 		sc = LightServerWss
+
+	if args.udp:
+		sc = LightServerUdp
 
 	server = server_main(ServerClass=sc, leds=leds)
 
