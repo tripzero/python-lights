@@ -156,7 +156,9 @@ class LightClientUdp(LightClient):
 					i = self.send_queue.get_nowait()
 					msg.extend(i)
 
+				self.debug_print("sending payload size: {}".format(len(msg)))
 				msg = self.writeHeader(msg)
+
 				self.writer.sendto(msg)
 
 			yield from asyncio.sleep(1.0 / self.fps)
@@ -352,8 +354,10 @@ if __name__ == "__main__":
 		client = LightClient(debug=args.debug)
 
 	def onConnected():
-		print("client onConnected:")
+		print("client onConnected")
+		print("sending clear()")
 		client.clear()
+		print("sending setAllColor()")
 		client.setAllColor([0, 0, 100])
 
 	if args.wss:
