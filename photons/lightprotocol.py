@@ -29,6 +29,15 @@ class InvalidCommandException(Exception):
 class InvalidMessageLength(Exception):
 	pass
 
+class LightProtocolCommand:
+	SetColor = 0x01
+	SetNumLeds = 0x02
+	Clear = 0x03
+	SetDebug = 0x05
+	SetAllColor = 0x06
+	SetSeries = 0x07
+
+
 class LightProtocol:
 	"""
 		Light protocol follows the following frame/payload structure:
@@ -108,6 +117,9 @@ class LightProtocol:
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
+	def send(self, msg):
+		return msg
+
 	def writeHeader(self, msg):
 		"""write header:
 		[8bit][16bit]
@@ -131,7 +143,7 @@ class LightProtocol:
 		[Command][Number_Lights_to_set][id_1][r][g][b][id_n][r][g][b]...
 		"""
 		header = bytearray()
-		header.append(0x01)
+		header.append(LightProtocolCommand.SetColor)
 		header.extend(struct.pack('<H', 1))
 
 		light = bytearray()
@@ -151,7 +163,7 @@ class LightProtocol:
 		"""
 
 		buff = bytearray()
-		buff.append(0x07)
+		buff.append(LightProtocolCommand.SetSeries)
 		buff.extend(struct.pack('<H', startId))
 		buff.extend(struct.pack('<H', length))
 		buff.extend(color)
@@ -170,7 +182,7 @@ class LightProtocol:
 		"""
 
 		header = bytearray()
-		header.append(0x06)
+		header.append(LightProtocolCommand.SetAllColor)
 
 		light = bytearray()
 		light.extend(color)
@@ -188,19 +200,19 @@ class LightProtocol:
 		"""
 
 		header = bytearray()
-		header.append(0x03)
+		header.append(LightProtocolCommand.Clear)
 
 		return self.send(header)
 
 	def setNumLeds(self, numLeds):
 		buff = bytearray()
-		buff.append(0x02)
+		buff.append(LightProtocolCommand.SetNumLeds)
 		buff.extend(struct.pack('<H', numLeds))
 		return self.send(buff)
 
 	def setDebug(self, d):
 		buff = bytearray()
-		buff.append(0x05)
+		buff.append(LightProtocolCommand.SetDebug)
 		buff.append(int(d))
 		return self.send(buff)
 
@@ -237,7 +249,7 @@ class LightProtocol:
 			else:
 				raise InvalidCommandException("command {0} not supported in {}".format(cmd, self.protocol_version))
 
-	@LightParser.command(0x01)
+	@LightParser.command(LightProtocolCommand.SetColor)
 	def parseSetColor(self, msg):
 		assert(len(msg) >= 6)
 
@@ -257,12 +269,12 @@ class LightProtocol:
 
 		return msg[light:]
 
-	@LightParser.command(0x03)
+	@LightParser.command(LightProtocolCommand.Clear)
 	def parseClear(self, msg):
 		self.leds.clear()
 		return msg[1:]
 
-	@LightParser.command(0x02)
+	@LightParser.command(LightProtocolCommand.SetNumLeds)
 	def parseSetNumLeds(self, msg):
 		numlights = struct.unpack('<H', msg[1:3])[0]
 
@@ -270,7 +282,7 @@ class LightProtocol:
 
 		return msg[3:]
 
-	@LightParser.command(0x06)
+	@LightParser.command(LightProtocolCommand.SetAllColor)
 	def parseSetAllLeds(self, msg):
 
 		assert(len(msg) > 3)
@@ -285,7 +297,7 @@ class LightProtocol:
 
 		return msg[4:]
 
-	@LightParser.command(0x07)
+	@LightParser.command(LightProtocolCommand.SetSeries)
 	def parseSetSeries(self, msg):
 		start_id = struct.unpack('<H', msg[1:3])[0]
 		numlights = struct.unpack('<H', msg[3:5])[0]
@@ -302,7 +314,7 @@ class LightProtocol:
 		return msg[8:]
 
 
-	@LightParser.command(0x05)
+	@LightParser.command(LightProtocolCommand.SetDebug)
 	def parseSetDebug(self, msg):
 		debug = msg[1]
 

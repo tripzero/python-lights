@@ -31,6 +31,7 @@ class LightClientWss(Client, LightProtocol):
 
 	def send(self, msg):
 		self.send_queue.put_nowait(msg)
+		return msg
 
 	@asyncio.coroutine
 	def _process_send(self):
@@ -102,6 +103,7 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 
 	def send(self, msg):
 		self.send_queue.put_nowait(msg)
+		return msg
 
 	@asyncio.coroutine
 	def _process_send(self):
@@ -136,6 +138,9 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 class LightClientUdp(LightClient):
 	def __init__(self, *args, **kwargs):
 		LightClient.__init__(self, *args, **kwargs)
+		self.max_packet_size = 2000
+		if "max_packet_size" in kwargs.keys():
+			self.max_packet_size = kwargs["max_packet_size"]
 
 	def error_received(self, *args):
 		print("udp error recieved... {}".format(args))
@@ -152,7 +157,7 @@ class LightClientUdp(LightClient):
 			if self.connected and self.send_queue.qsize():
 				msg = bytearray()
 
-				while self.send_queue.qsize() > 0:
+				while self.send_queue.qsize() > 0 and len(msg) < self.max_packet_size:
 					i = self.send_queue.get_nowait()
 					msg.extend(i)
 
@@ -276,12 +281,6 @@ def test_protocol(debug=False):
 
 
 		msg = b'0301010001008a006c0101000200170000010100040050003f0101000800c300000101000900e70000'
-		msg = bytearray(binascii.unhexlify(msg))
-
-		c.send(msg)
-		yield from (asyncio.sleep(5))
-
-		msg = b'0301040006000064'
 		msg = bytearray(binascii.unhexlify(msg))
 
 		c.send(msg)
