@@ -229,8 +229,8 @@ class ColorTransformAnimation(BaseAnimation):
 				print("Can only support one ColorTransformAnimation per light")
 			return
 
-		if  not len(fromColor):
-			prevColor = self.leds.color(led)[:]
+		if not len(fromColor):
+			prevColor = self.leds.color(led)
 		else:
 			prevColor = fromColor
 
@@ -287,10 +287,15 @@ class ColorTransformAnimation(BaseAnimation):
 
 		if self.debug:
 			print("color a: {}".format(color))
+
 	
 		for c in range(3):
 			s = steps[c]
 			color[c] += s
+			if color[c] < 0:
+				color[c] = 0
+			elif color[c] > 255:
+				color[c] = 255
 	
 		if self.debug:
 			print("color b: {}".format(color))
@@ -302,7 +307,6 @@ class ColorTransformAnimation(BaseAnimation):
 			ret = True
 			animation.complete()
 
-		#animation.color = color
 		self.leds.changeColor(animation.led, animation.color_as_int())
 
 		if self.debug:
@@ -335,6 +339,7 @@ class ColorTransformAnimation(BaseAnimation):
 			exc_type, exc_value, exc_traceback = sys.exc_info()
 			traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
 			traceback.print_exception(exc_type, exc_value, exc_traceback, limit=6, file=sys.stdout)
+			sys.exit()
 
 		if self.debug:
 			print("animation {} is complete. Calling promise".format(self))
@@ -370,13 +375,13 @@ class LightFpsController:
 					self.needsUpdate = False
 			except KeyboardInterrupt:
 				raise KeyboardInterrupt
-			except:
+			"""except:
 				print("bork in _doUpdate")
 				import traceback, sys
 				exc_type, exc_value, exc_traceback = sys.exc_info()
 				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
 				traceback.print_exception(exc_type, exc_value, exc_traceback,
-	                          limit=8, file=sys.stdout)
+	                          limit=8, file=sys.stdout)"""
 
 			yield from asyncio.sleep(1.0 / self.fps)
 
@@ -402,6 +407,12 @@ class LightArray2(LightFpsController):
 
 	def changeColor(self, ledNumber, color):
 		with self.locker:
+			if color[2] == 255:
+				raise Exception("evil blue")
+
+			if self.driver.supportsChangeColor:
+				self.driver.changeColor(ledNumber, color)
+
 			self.ledsData[ledNumber] = color
 			self.update()
 
@@ -444,9 +455,18 @@ class LightArray2(LightFpsController):
 
 		transform.complete()
 
+class BaseDriver:
 
-class Ws2801Driver:
+	def __init__(self):
+		self.supportsChangeColor = False
+
+	def changeColor(self, id, color):
+		pass
+
+
+class Ws2801Driver(BaseDriver):
 	def __init__(self, freqs=800000, debug=None):
+		BaseDriver.__init__(self)
 		try:
 			import mraa
 			self.spiDev = mraa.Spi(0)
@@ -467,10 +487,11 @@ class FakeSpi:
 	def write(self, data):
 		pass
 
-class Apa102Driver:
+class Apa102Driver(BaseDriver):
 
 	def __init__(self, freqs=8000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
-		
+		BaseDriver.__init__(self)
+
 		try:
 			import mraa
 			self.spiDev = mraa.Spi(0)
@@ -540,10 +561,11 @@ class Apa102Driver:
 		self.spiDev.write(data)
 
 
-class OpenCvSimpleDriver:
-	
+class OpenCvSimpleDriver(BaseDriver):
 
 	def __init__(self, debug=None, size=50, wrap=100, opengl=False):
+		BaseDriver.__init__(self)
+
 		self.debug=debug
 		self.image = None
 		self.size = size
@@ -599,92 +621,7 @@ class OpenCvSimpleDriver:
 			self.waitKey(1)
 			yield from asyncio.sleep(1.0/60.0) #60 fps...
 
-
-class OpenCvDriver:
-	image = None
-	size = 50
-	dimensions = None
-
-	def __init__(self, debug=None):
-		self.dimensions = (1, 1, 0, 0)
-
-	def update(self, ledsData):
-		import cv2
-
-		bottom, right, top, left = self.dimensions
-		height = max(right, left, 1)
-		width = max(bottom, top, 1)
-		if width == 1 and right and left:
-			width = 2
-
-		if height == 1 and bottom and top:
-			height = 2
-
-		width = width * self.size
-		height = height * self.size
-
-		if self.image == None:
-			self.image = np.zeros((height, width, 3), np.uint8)
-
-		yStep = height / 8
-		xStep = width / 8
-
-		if right != 0:
-			yStep = height / (right)
-		if bottom != 0:
-			xStep = width / (bottom)
-
-		#bottom
-		y = height
-		x = 0
-
-		if bottom:
-			pos = 0
-			posEnd = bottom
-			for color in ledsData[pos : posEnd]:
-				self.image[height - self.size : height, x : x + xStep] = color
-				x += xStep
-
-		#right
-		if right:
-			pos = bottom
-			posEnd = pos + right
-			for color in ledsData[pos : posEnd]:
-				self.image[y - yStep : y, width - self.size : width] = color
-				y -= yStep
-
-		#reset steps for top and left
-		yStep = height / 8
-		xStep = width / 8
-
-		if left != 0:
-			yStep = height / (left)
-		if top != 0:
-			xStep = width / (top)
-
-		x = width
-
-		#top
-		if top:
-			pos = bottom + right
-			posEnd = pos + top
-			for color in ledsData[pos : posEnd]:
-				self.image[0 : self.size, x - xStep : x] = color
-				x -= xStep
-
-		y = 0
-
-		#left
-		if left:
-			pos = bottom + right + top
-			posEnd = pos + left
-			for color in ledsData[pos : posEnd]:
-				self.image[y : y + yStep, 0 : self.size] = color
-				y += yStep
-
-		cv2.imshow("output", self.image)
-
-class DummyDriver:
+class DummyDriver(BaseDriver):
 
 	def __init__(self, debug=False, **kwargs):
 		self.debug = debug
@@ -699,7 +636,7 @@ def getDriver(driverName = None):
 	except ImportError:
 		from photons import LightClient, LightClientWss, LightClientUdp
 
-	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvDriver, "LightClient" : LightClient, 
+	drivers = { "Ws2801" : Ws2801Driver, "Apa102" : Apa102Driver, "OpenCV" : OpenCvSimpleDriver, "LightClient" : LightClient, 
 				"OpenCVSimple" : OpenCvSimpleDriver, "Dummy" : DummyDriver , "LightClientWss" : LightClientWss,
 				"LightClientUdp" : LightClientUdp}
 

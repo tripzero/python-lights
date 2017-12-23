@@ -52,7 +52,10 @@ class LightClientWss(Client, LightProtocol):
 class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 
 
-	def __init__(self, host=None, port=None, loop = asyncio.get_event_loop(), debug = False, onConnected = None, onDisconnected = None, fps=60):
+	def __init__(self, host=None, port=None, loop = asyncio.get_event_loop(),
+					debug = False, onConnected = None, onDisconnected = None,
+					fps=60, compression = False):
+
 		LightProtocol.__init__(self, debug = debug)
 		ReconnectAsyncio.__init__(self, retry=True)
 		self.reader = None
@@ -137,10 +140,19 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 
 class LightClientUdp(LightClient):
 	def __init__(self, *args, **kwargs):
+		"""
+			LightClientUdp
+
+			max_packet_size can be used to limit the size of packets being sent
+			Actual sent packet may be +- 10 or so above the max_packet_size
+		"""
 		LightClient.__init__(self, *args, **kwargs)
-		self.max_packet_size = 2000
+		self.max_packet_size = 5000
 		if "max_packet_size" in kwargs.keys():
 			self.max_packet_size = kwargs["max_packet_size"]
+
+		if "compression" in kwargs.keys():
+			self.compression = kwargs["compression"]
 
 	def error_received(self, *args):
 		print("udp error recieved... {}".format(args))

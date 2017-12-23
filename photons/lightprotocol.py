@@ -58,6 +58,10 @@ class LightProtocol:
 	ledsDataCopy = None
 
 	def __init__(self, leds=None, debug = False):
+
+		self.supportsChangeColor = False
+		self.changeColor = self.setColor
+
 		"""leds = LightArray2 handle.  This is only used when trying to parse."""
 		self.leds = leds
 		self.protocol_version = 0x01 #version 1.0
@@ -112,7 +116,7 @@ class LightProtocol:
 
 		ledsToChange = bytearray()
 		for i in range(len(diff)):
-			if not np.all(np.equal(diff[i], [0,0,0])):
+			if not np.all(np.equal(diff[i], [0, 0, 0])):
 				self.setColor(i, ledsData[i])
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
