@@ -407,9 +407,6 @@ class LightArray2(LightFpsController):
 
 	def changeColor(self, ledNumber, color):
 		with self.locker:
-			if color[2] == 255:
-				raise Exception("evil blue")
-
 			if self.driver.supportsChangeColor:
 				self.driver.changeColor(ledNumber, color)
 
