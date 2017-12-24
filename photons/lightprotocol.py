@@ -38,6 +38,14 @@ class LightProtocolCommand:
 	SetSeries = 0x07
 
 
+class ColorChangeSet:
+	def __init__(self):
+		self.changes = {}
+
+	def append_color(self, id, color):
+		self.changes[id] = color
+
+
 class LightProtocol:
 	"""
 		Light protocol follows the following frame/payload structure:
@@ -115,13 +123,17 @@ class LightProtocol:
 			diff = np.bitwise_xor(ledsData, self.ledsDataCopy)
 
 		ledsToChange = bytearray()
+		changeset = {}
 		for i in range(len(diff)):
 			if not np.all(np.equal(diff[i], [0, 0, 0])):
-				self.setColor(i, ledsData[i])
+				changeset[i] = ledsData[i]
+
+		self.setColor([*changeset], list(changeset.values()))
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
 	def send(self, msg):
+		"""This is intended to be overridden"""
 		return msg
 
 	def writeHeader(self, msg):
@@ -148,13 +160,25 @@ class LightProtocol:
 		"""
 		header = bytearray()
 		header.append(LightProtocolCommand.SetColor)
-		header.extend(struct.pack('<H', 1))
 
+		if not isinstance(id, list):
+			id = [id]
+
+		if not isinstance(color, list):
+			color = [color]
+
+		header.extend(struct.pack('<H', len(id)))
+
+		i = 0
 		light = bytearray()
-		light.extend(struct.pack('<H', id))
-		light.extend(color)
-
+		
+		for curr_id in id:
+			light.extend(struct.pack('<H', curr_id))
+			light.extend(color[i])
+			i += 1
+		
 		buff = header + light
+
 		return self.send(buff)
 
 	def setSeries(self, startId, length, color):
