@@ -108,19 +108,22 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 		self.send_queue.put_nowait(msg)
 		return msg
 
+	def flush(self):
+		msg = bytearray()
+
+		while self.send_queue.qsize() > 0:
+			i = self.send_queue.get_nowait()
+			msg.extend(i)
+
+		msg = self.writeHeader(msg)
+		self.writer.write(msg)
+
 	@asyncio.coroutine
 	def _process_send(self):
 		while True:
 
 			if self.connected and self.send_queue.qsize():
-				msg = bytearray()
-
-				while self.send_queue.qsize() > 0:
-					i = self.send_queue.get_nowait()
-					msg.extend(i)
-
-				msg = self.writeHeader(msg)
-				self.writer.write(msg)
+				self.flush()
 
 			yield from asyncio.sleep(1.0 / self.fps)
 		
@@ -162,24 +165,17 @@ class LightClientUdp(LightClient):
 		yield from asyncio.get_event_loop().create_datagram_endpoint(lambda: self,
 			remote_addr=(self.addy, self.port))
 
-	@asyncio.coroutine
-	def _process_send(self):
-		while True:
+	def flush(self):
+		msg = bytearray()
 
-			if self.connected and self.send_queue.qsize():
-				msg = bytearray()
+		while self.send_queue.qsize() > 0 and len(msg) < self.max_packet_size:
+			i = self.send_queue.get_nowait()
+			msg.extend(i)
 
-				while self.send_queue.qsize() > 0 and len(msg) < self.max_packet_size:
-					i = self.send_queue.get_nowait()
-					msg.extend(i)
+		self.debug_print("sending payload size: {}".format(len(msg)))
+		msg = self.writeHeader(msg)
 
-				self.debug_print("sending payload size: {}".format(len(msg)))
-				msg = self.writeHeader(msg)
-
-				self.writer.sendto(msg)
-
-			yield from asyncio.sleep(1.0 / self.fps)
-
+		self.writer.sendto(msg)
 
 def test_protocol(debug=False):
 

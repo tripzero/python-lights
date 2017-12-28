@@ -364,14 +364,14 @@ class LightFpsController:
 		self.needsUpdate = True
 
 	def updateNow(self):
-		self.driver.update(self.ledsData)
+		self.driver.update(self.ledsData, force=True)
 
 	@asyncio.coroutine
 	def _updateLoop(self):
 		while True:
 			try:
 				if self.needsUpdate == True:
-					self.updateNow()
+					self.driver.update(self.ledsData)
 					self.needsUpdate = False
 			except KeyboardInterrupt:
 				raise KeyboardInterrupt
@@ -460,6 +460,9 @@ class BaseDriver:
 	def changeColor(self, id, color):
 		pass
 
+	def update(self, ledsData, force=False):
+		self.update(ledsData)
+
 
 class Ws2801Driver(BaseDriver):
 	def __init__(self, freqs=800000, debug=None):
@@ -488,6 +491,7 @@ class Apa102Driver(BaseDriver):
 
 	def __init__(self, freqs=8000000, debug=None, brightness=100, pixel_order=PixelFormat.gbr):
 		BaseDriver.__init__(self)
+		self.supportsChangeColor = False
 
 		try:
 			import mraa

@@ -103,7 +103,7 @@ class LightProtocol:
 			index += length
 
 
-	def update(self, ledsData):
+	def update(self, ledsData, force = False):
 		if len(ledsData) == 1 or np.unique(ledsData).size == 1:
 			self.setAllColor(ledsData[0])
 			return
@@ -132,9 +132,17 @@ class LightProtocol:
 
 		self.ledsDataCopy = np.array(ledsData, copy=True)
 
+		if force:
+			self.flush()
+
 	def send(self, msg):
 		"""This is intended to be overridden"""
 		return msg
+
+	def flush(self):
+		"""This is intended to be overriden.
+		   Flush any buffers."""
+		pass
 
 	def writeHeader(self, msg):
 		"""write header:
