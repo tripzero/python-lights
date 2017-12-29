@@ -584,7 +584,7 @@ class OpenCvSimpleDriver(BaseDriver):
 
 		asyncio.get_event_loop().create_task(self.process_cv2_mainloop())
 
-	def update(self, ledsData):
+	def update(self, ledsData, force=False):
 		width = len(ledsData) * self.size
 		height = self.size
 
