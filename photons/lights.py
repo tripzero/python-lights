@@ -475,7 +475,7 @@ class Ws2801Driver(BaseDriver):
 			print("Ws2801Driver: SPI not available.  Using FakeSPI")
 			self.spiDev = FakeSpi()
 
-	def update(self, ledsData):
+	def update(self, ledsData, force=False):
 		self.spiDev.write(bytearray(ledsData.tobytes()))
 
 class PixelFormat:
@@ -542,7 +542,7 @@ class Apa102Driver(BaseDriver):
 	def power(self, ledsData):
 		return np.sum((ledsData / [255, 255, 255] * 0.2))
 
-	def update(self, ledsData):
+	def update(self, ledsData, force=False):
 		if self.numLeds == None:
 			self.numLeds = len(ledsData)
 
@@ -627,7 +627,7 @@ class DummyDriver(BaseDriver):
 	def __init__(self, debug=False, **kwargs):
 		self.debug = debug
 
-	def update(self, ledsData):
+	def update(self, ledsData, force=False):
 		if self.debug:
 			print("DummyDriver -> update() called")
 
