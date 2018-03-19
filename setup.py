@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from setuptools import setup, Extension
+from setuptools import setup, find_packages
 
 classifiers = """\
 Development Status :: 4 - Beta
 Intended Audience :: Developers
 License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)
-Programming Language :: Python3
+Programming Language :: Python :: 3 :: Only
 Topic :: System :: Hardware
 Topic :: Software Development :: Libraries :: Python Modules
 Operating System :: Unix
