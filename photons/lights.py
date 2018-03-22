@@ -613,7 +613,7 @@ class OpenCvSimpleDriver(BaseDriver):
 
 		self.imshow("output", self.image)
 
-		if not asyncio.get_event_loop().is_running():
+		if force or not asyncio.get_event_loop().is_running():
 			self.waitKey(1)
 
 	@asyncio.coroutine
@@ -625,6 +625,7 @@ class OpenCvSimpleDriver(BaseDriver):
 class DummyDriver(BaseDriver):
 
 	def __init__(self, debug=False, **kwargs):
+		BaseDriver.__init__(self)
 		self.debug = debug
 
 	def update(self, ledsData, force=False):
