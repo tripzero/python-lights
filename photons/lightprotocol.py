@@ -2,358 +2,371 @@ import numpy as np
 import struct
 import binascii
 
+
 class LightParser:
 
-	commandsMap = {}
+    commandsMap = {}
 
-	@staticmethod
-	def command(cmd):
-		def make_command(func):
-			LightParser.commandsMap[cmd] = func
-			return func
-		return make_command
+    @staticmethod
+    def command(cmd):
+        def make_command(func):
+            LightParser.commandsMap[cmd] = func
+            return func
+        return make_command
+
 
 class IncompatibleProtocolException(Exception):
-	def __init__(self, protocol, should_be_protocol):
-		Exception.__init__(self)
-		print("protocol {} should be {}".format(protocol, should_be_protocol))
+    def __init__(self, protocol, should_be_protocol):
+        Exception.__init__(self)
+        print("protocol {} should be {}".format(protocol, should_be_protocol))
+
 
 class BadMessageTypeException(Exception):
-	def __init__(self):
-		Exception.__init__(self)
-		print("message type should be bytearray")
+    def __init__(self):
+        Exception.__init__(self)
+        print("message type should be bytearray")
+
 
 class InvalidCommandException(Exception):
-	pass
+    pass
+
 
 class InvalidMessageLength(Exception):
-	pass
+    pass
+
 
 class LightProtocolCommand:
-	SetColor = 0x01
-	SetNumLeds = 0x02
-	Clear = 0x03
-	SetDebug = 0x05
-	SetAllColor = 0x06
-	SetSeries = 0x07
+    SetColor = 0x01
+    SetNumPixels = 0x02
+    Clear = 0x03
+    SetDebug = 0x05
+    SetAllColor = 0x06
+    SetSeries = 0x07
 
 
 class ColorChangeSet:
-	def __init__(self):
-		self.changes = {}
+    def __init__(self):
+        self.changes = {}
 
-	def append_color(self, id, color):
-		self.changes[id] = color
+    def append_color(self, id, color):
+        self.changes[id] = color
 
 
 class LightProtocol:
-	"""
-		Light protocol follows the following frame/payload structure:
+    """
+            Light protocol follows the following frame/payload structure:
 
-		[Header] [Payload]
+            [Header] [Payload]
 
-		Header:
+            Header:
 
-		[Protocol_Version][Payload_Length]
-		[1byte][2bytes]
+            [Protocol_Version][Payload_Length]
+            [1byte][2bytes]
 
-		Payload:
-		[Command][Data]
-		[1byte][...]
+            Payload:
+            [Command][Data]
+            [1byte][...]
 
+            Commands (@see LightProtocolCommand):
 
-	"""
-	ledsDataCopy = None
+            SetColor - Set the color of an pixel
+            SetNumPixels - Set number of pixels in string
+            SetDebug - turn on/off debugging messages on client/server
+            SetAllColor - Set all pixels in string to color
+            SetSeries - Set a series of pixels in string to color
 
-	def __init__(self, leds=None, debug = False):
 
-		self.supportsChangeColor = False
-		self.changeColor = self.setColor
+    """
+    ledsDataCopy = None
 
-		"""leds = LightArray2 handle.  This is only used when trying to parse."""
-		self.leds = leds
-		self.protocol_version = 0x01 #version 1.0
-		self.debug = debug
-		self.compression = False
+    def __init__(self, leds=None, debug=False):
 
-	def debug_print(self, msg):
-		if self.debug:
-			print(msg)
+        self.supportsChangeColor = False
+        self.changeColor = self.setColor
 
-	def updateCompress(self, ledsData):
-		index = 0
+        """leds = LightArray2 handle.  This is only used when trying to parse."""
+        self.leds = leds
+        self.protocol_version = 0x01  # version 1.0
+        self.debug = debug
+        self.compression = False
 
-		while index < len(ledsData):
-			color = ledsData[index]
-			startId = index
-			length = 0
-			for i in ledsData[index:]:
-				if not np.array_equal(color, i):
-					break
+    def debug_print(self, msg):
+        if self.debug:
+            print(msg)
 
-				length += 1
+    def updateCompress(self, ledsData):
+        index = 0
 
-			if length < 4:
-				"""if the length is less than 4, it's not worth the extra bits to send a setSeries"""
-				for i in range(length):
-					self.setColor(startId + i, color)
-			else:
-				self.setSeries(startId, length, color)
+        while index < len(ledsData):
+            color = ledsData[index]
+            startId = index
+            length = 0
+            for i in ledsData[index:]:
+                if not np.array_equal(color, i):
+                    break
 
-			index += length
+                length += 1
 
+            if length < 4:
+                """if the length is less than 4, it's not worth the extra bits to send a setSeries"""
+                for i in range(length):
+                    self.setColor(startId + i, color)
+            else:
+                self.setSeries(startId, length, color)
 
-	def update(self, ledsData, force = False):
-		if len(ledsData) == 1 or np.unique(ledsData).size == 1:
-			self.setAllColor(ledsData[0])
-			return
+            index += length
 
-		if self.compression:
-			stdDev = np.std(ledsData)
+    def update(self, ledsData, force=False):
+        if len(ledsData) == 1 or np.unique(ledsData).size == 1:
+            self.setAllColor(ledsData[0])
+            return
 
-			if stdDev < len(ledsData) / 4:
-				" if there's a lot of common data, we can compress the stream and break up the packets "
-				return self.updateCompress(ledsData)
+        if self.compression:
+            stdDev = np.std(ledsData)
 
-		if self.ledsDataCopy is None:
-			self.ledsDataCopy = np.array(ledsData, copy=True)
-			#self.setNumLeds(len(self.ledsDataCopy))
-			diff = self.ledsDataCopy
-		else:
-			diff = np.bitwise_xor(ledsData, self.ledsDataCopy)
+            if stdDev < len(ledsData) / 4:
+                " if there's a lot of common data, we can compress the stream and break up the packets "
+                return self.updateCompress(ledsData)
 
-		ledsToChange = bytearray()
-		changeset = {}
-		for i in range(len(diff)):
-			if not np.all(np.equal(diff[i], [0, 0, 0])):
-				changeset[i] = ledsData[i]
+        if self.ledsDataCopy is None:
+            self.ledsDataCopy = np.array(ledsData, copy=True)
+            # self.SetNumPixels(len(self.ledsDataCopy))
+            diff = self.ledsDataCopy
+        else:
+            diff = np.bitwise_xor(ledsData, self.ledsDataCopy)
 
-		self.setColor([*changeset], list(changeset.values()))
+        ledsToChange = bytearray()
+        changeset = {}
+        for i in range(len(diff)):
+            if not np.all(np.equal(diff[i], [0, 0, 0])):
+                changeset[i] = ledsData[i]
 
-		self.ledsDataCopy = np.array(ledsData, copy=True)
+        self.setColor([*changeset], list(changeset.values()))
 
-		if force:
-			self.flush()
+        self.ledsDataCopy = np.array(ledsData, copy=True)
 
-	def send(self, msg):
-		"""This is intended to be overridden"""
-		return msg
+        if force:
+            self.flush()
 
-	def flush(self):
-		"""This is intended to be overriden.
-		   Flush any buffers."""
-		pass
+    def send(self, msg):
+        """This is intended to be overridden"""
+        return msg
 
-	def writeHeader(self, msg):
-		"""write header:
-		[8bit][16bit]
-		[protocol_version][msg_length]
-		"""
+    def flush(self):
+        """This is intended to be overriden.
+           Flush any buffers."""
+        pass
 
-		header = bytearray([self.protocol_version]) #protocol version 1.0
-		header.extend(struct.pack('<H', len(msg)))
+    def writeHeader(self, msg):
+        """write header:
+        [8bit][16bit]
+        [protocol_version][msg_length]
+        """
 
-		msg = header + msg
+        header = bytearray([self.protocol_version])  # protocol version 1.0
+        header.extend(struct.pack('<H', len(msg)))
 
-		return msg
+        msg = header + msg
 
-	def setColor(self, id, color):
-		"""
-		Command 0x01
-		sets the color of a specific light
+        return msg
 
-		Data:
+    def setColor(self, id, color):
+        """
+        Command 0x01
+        sets the color of a specific light
 
-		[Command][Number_Lights_to_set][id_1][r][g][b][id_n][r][g][b]...
-		"""
-		header = bytearray()
-		header.append(LightProtocolCommand.SetColor)
+        Data:
 
-		if not isinstance(id, list):
-			id = [id]
+        [Command][Number_Lights_to_set][id_1][r][g][b][id_n][r][g][b]...
+        """
+        header = bytearray()
+        header.append(LightProtocolCommand.SetColor)
 
-		if not isinstance(color, list):
-			color = [color]
+        if not isinstance(id, list):
+            id = [id]
 
-		header.extend(struct.pack('<H', len(id)))
+        if not isinstance(color, list):
+            color = [color]
 
-		i = 0
-		light = bytearray()
-		
-		for curr_id in id:
-			light.extend(struct.pack('<H', curr_id))
-			light.extend(color[i])
-			i += 1
-		
-		buff = header + light
+        header.extend(struct.pack('<H', len(id)))
 
-		return self.send(buff)
+        i = 0
+        light = bytearray()
 
-	def setSeries(self, startId, length, color):
-		"""
-		Command 0x07
-		sets all lights in the series starting from "startId" to "endId" to "color"
+        for curr_id in id:
+            light.extend(struct.pack('<H', curr_id))
+            light.extend(color[i])
+            i += 1
 
-		Data:
-		[0x07][startId][length][r][g][b]
-		"""
+        buff = header + light
 
-		buff = bytearray()
-		buff.append(LightProtocolCommand.SetSeries)
-		buff.extend(struct.pack('<H', startId))
-		buff.extend(struct.pack('<H', length))
-		buff.extend(color)
+        return self.send(buff)
 
-		return self.send(buff)
+    def setSeries(self, startId, length, color):
+        """
+        Command 0x07
+        sets all lights in the series starting from "startId" to "endId" to "color"
 
+        Data:
+        [0x07][startId][length][r][g][b]
+        """
 
-	def setAllColor(self, color):
-		"""
-		Command: 0x06
-		sets all colors in the array
+        buff = bytearray()
+        buff.append(LightProtocolCommand.SetSeries)
+        buff.extend(struct.pack('<H', startId))
+        buff.extend(struct.pack('<H', length))
+        buff.extend(color)
 
-		Data:
-		[Command][r][g][b]
+        return self.send(buff)
 
-		"""
+    def setAllColor(self, color):
+        """
+        Command: 0x06
+        sets all colors in the array
 
-		header = bytearray()
-		header.append(LightProtocolCommand.SetAllColor)
+        Data:
+        [Command][r][g][b]
 
-		light = bytearray()
-		light.extend(color)
+        """
 
-		buff = header + light
-		return self.send(buff)
+        header = bytearray()
+        header.append(LightProtocolCommand.SetAllColor)
 
-	def clear(self):
-		"""
-		Command: 0x03
-		clear all leds
+        light = bytearray()
+        light.extend(color)
 
-		Data:
-		[Command]
-		"""
+        buff = header + light
+        return self.send(buff)
 
-		header = bytearray()
-		header.append(LightProtocolCommand.Clear)
+    def clear(self):
+        """
+        Command: 0x03
+        clear all leds
 
-		return self.send(header)
+        Data:
+        [Command]
+        """
 
-	def setNumLeds(self, numLeds):
-		buff = bytearray()
-		buff.append(LightProtocolCommand.SetNumLeds)
-		buff.extend(struct.pack('<H', numLeds))
-		return self.send(buff)
+        header = bytearray()
+        header.append(LightProtocolCommand.Clear)
 
-	def setDebug(self, d):
-		buff = bytearray()
-		buff.append(LightProtocolCommand.SetDebug)
-		buff.append(int(d))
-		return self.send(buff)
+        return self.send(header)
 
-	def parse(self, msg_b):
-		if not isinstance(msg_b, bytearray):
-			raise BadMessageTypeException()
+    def SetNumPixels(self, numLeds):
+        buff = bytearray()
+        buff.append(LightProtocolCommand.SetNumPixels)
+        buff.extend(struct.pack('<H', numLeds))
+        return self.send(buff)
 
-		if self.debug:
-			self.debug_print("message: {}".format(binascii.hexlify(msg_b)))
+    def setDebug(self, d):
+        buff = bytearray()
+        buff.append(LightProtocolCommand.SetDebug)
+        buff.append(int(d))
+        return self.send(buff)
 
-		#msg = memoryview(msg_b)
-		msg = msg_b
+    def parse(self, msg_b):
+        if not isinstance(msg_b, bytearray):
+            raise BadMessageTypeException()
 
-		protocol_version = msg[0]
-		msg_length = struct.unpack('<H', msg[1:3])[0]
+        if self.debug:
+            self.debug_print("message: {}".format(binascii.hexlify(msg_b)))
 
-		if protocol_version != self.protocol_version:
-			raise IncompatibleProtocolException(protocol_version, self.protocol_version)
+        #msg = memoryview(msg_b)
+        msg = msg_b
 
-		msg = msg[3:] #remove header and process all commands in message:
+        protocol_version = msg[0]
+        msg_length = struct.unpack('<H', msg[1:3])[0]
 
-		if len(msg) < msg_length:
-			raise InvalidMessageLength()
+        if protocol_version != self.protocol_version:
+            raise IncompatibleProtocolException(
+                protocol_version, self.protocol_version)
 
+        msg = msg[3:]  # remove header and process all commands in message:
 
-		while len(msg):
+        if len(msg) < msg_length:
+            raise InvalidMessageLength()
 
-			cmd = msg[0]
-			if cmd in LightParser.commandsMap:
-				msg = LightParser.commandsMap[cmd](self, msg)
+        while len(msg):
 
-				if self.debug:
-					self.debug_print("remaining message: {}".format(binascii.hexlify(msg)))
-			else:
-				raise InvalidCommandException("command {0} not supported in {}".format(cmd, self.protocol_version))
+            cmd = msg[0]
+            if cmd in LightParser.commandsMap:
+                msg = LightParser.commandsMap[cmd](self, msg)
 
-	@LightParser.command(LightProtocolCommand.SetColor)
-	def parseSetColor(self, msg):
-		assert(len(msg) >= 6)
+                if self.debug:
+                    self.debug_print(
+                        "remaining message: {}".format(binascii.hexlify(msg)))
+            else:
+                raise InvalidCommandException(
+                    "command {0} not supported in {}".format(cmd, self.protocol_version))
 
-		numlights = struct.unpack('<H', msg[1:3])[0]
+    @LightParser.command(LightProtocolCommand.SetColor)
+    def parseSetColor(self, msg):
+        assert(len(msg) >= 6)
 
-		light = 3 #start at light at position 3 in the msg
-		for i in range(numlights):
-			id = struct.unpack('<H', msg[light:light+2])[0]
+        numlights = struct.unpack('<H', msg[1:3])[0]
 
-			r = msg[light+2]
-			g = msg[light+3]
-			b = msg[light+4]
+        light = 3  # start at light at position 3 in the msg
+        for i in range(numlights):
+            id = struct.unpack('<H', msg[light:light+2])[0]
 
-			self.leds.changeColor(id, [r, g, b])
+            r = msg[light+2]
+            g = msg[light+3]
+            b = msg[light+4]
 
-			light += 5 #5 bytes per light
+            self.leds.changeColor(id, [r, g, b])
 
-		return msg[light:]
+            light += 5  # 5 bytes per light
 
-	@LightParser.command(LightProtocolCommand.Clear)
-	def parseClear(self, msg):
-		self.leds.clear()
-		return msg[1:]
+        return msg[light:]
 
-	@LightParser.command(LightProtocolCommand.SetNumLeds)
-	def parseSetNumLeds(self, msg):
-		numlights = struct.unpack('<H', msg[1:3])[0]
+    @LightParser.command(LightProtocolCommand.Clear)
+    def parseClear(self, msg):
+        self.leds.clear()
+        return msg[1:]
 
-		self.leds.setLedArraySize(numlights)
+    @LightParser.command(LightProtocolCommand.SetNumPixels)
+    def parseSetNumPixels(self, msg):
+        numlights = struct.unpack('<H', msg[1:3])[0]
 
-		return msg[3:]
+        self.leds.setLedArraySize(numlights)
 
-	@LightParser.command(LightProtocolCommand.SetAllColor)
-	def parseSetAllLeds(self, msg):
+        return msg[3:]
 
-		assert(len(msg) > 3)
+    @LightParser.command(LightProtocolCommand.SetAllColor)
+    def parseSetAllLeds(self, msg):
 
-		pos = 1
-		r = msg[pos]
-		g = msg[pos+1]
-		b = msg[pos+2]
+        assert(len(msg) > 3)
 
-		for led in range(self.leds.ledArraySize):
-			self.leds.changeColor(led, [r, g, b])
+        pos = 1
+        r = msg[pos]
+        g = msg[pos+1]
+        b = msg[pos+2]
 
-		return msg[4:]
+        for led in range(self.leds.ledArraySize):
+            self.leds.changeColor(led, [r, g, b])
 
-	@LightParser.command(LightProtocolCommand.SetSeries)
-	def parseSetSeries(self, msg):
-		start_id = struct.unpack('<H', msg[1:3])[0]
-		numlights = struct.unpack('<H', msg[3:5])[0]
+        return msg[4:]
 
-		r = msg[5]
-		g = msg[6]
-		b = msg[7]
+    @LightParser.command(LightProtocolCommand.SetSeries)
+    def parseSetSeries(self, msg):
+        start_id = struct.unpack('<H', msg[1:3])[0]
+        numlights = struct.unpack('<H', msg[3:5])[0]
 
-		i = start_id
-		while i < start_id + numlights:
-			self.leds.changeColor(i, [r, g, b])
-			i += 1
+        r = msg[5]
+        g = msg[6]
+        b = msg[7]
 
-		return msg[8:]
+        i = start_id
+        while i < start_id + numlights:
+            self.leds.changeColor(i, [r, g, b])
+            i += 1
 
+        return msg[8:]
 
-	@LightParser.command(LightProtocolCommand.SetDebug)
-	def parseSetDebug(self, msg):
-		debug = msg[1]
+    @LightParser.command(LightProtocolCommand.SetDebug)
+    def parseSetDebug(self, msg):
+        debug = msg[1]
 
-		self.debug = debug == 1
+        self.debug = debug == 1
 
-		return msg[2:]
+        return msg[2:]

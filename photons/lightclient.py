@@ -15,7 +15,8 @@ except:
 
 class LightClientWss(Client, LightProtocol):
 
-    def __init__(self, host=None, port=None, retry=False, loop=None, debug=False, fps=60):
+    def __init__(self, host=None, port=None, retry=False, loop=None,
+                 debug=False, fps=60):
         Client.__init__(self, retry=retry, loop=loop)
         LightProtocol.__init__(self, debug=debug)
 
