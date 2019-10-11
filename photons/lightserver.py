@@ -1,5 +1,5 @@
 import asyncio
-from photons import LightProtocol
+from photons.lightprotocol import LightProtocol
 
 
 def server_main(ServerClass, **kwargs):
