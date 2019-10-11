@@ -195,7 +195,7 @@ class LightClientUdp(LightClient):
         """
                 LightClientUdp
 
-                max_packet_size can be used to limit the size of packets being sent
+                max_packet_size can be used to limit the size of packets sent
                 Actual sent packet may be +- 10 or so above the max_packet_size
         """
         LightClient.__init__(self, *args, **kwargs)
@@ -414,12 +414,8 @@ if __name__ == "__main__":
         print("sending setAllColor()")
         client.setAllColor([0, 0, 100])
 
-    if args.wss:
-        client.setOpenHandler(onConnected)
-        client.connectTo(args.address, args.port, useSsl=False)
-    else:
-        client.onConnected = onConnected
-        client.connectTo(args.address, args.port)
+    client.onConnected = onConnected
+    client.connectTo(args.address, args.port)
 
     client.loop.run_forever()
     client.loop.close()
