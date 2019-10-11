@@ -280,7 +280,6 @@ class ColorTransformAnimation(BaseAnimation):
 
     def start(self):
         BaseAnimation.start(self)
-        #print("animation {} started".format(self))
         asyncio.get_event_loop().create_task(self._run())
 
         return self.promise
@@ -320,27 +319,25 @@ class ColorTransformAnimation(BaseAnimation):
                 animation.led, color, animation.targetColor))
             print("start color: {}".format(animation.startColor))
             print("steps: {}".format(steps))
-            print("{}/{} complete".format(animation.frame_index, animation.num_frames))
+            print("{}/{} complete".format(animation.frame_index,
+                                          animation.num_frames))
 
         return ret
 
     @asyncio.coroutine
     def _run(self):
-        #print("trying to run animation for {}".format(self))
         try:
             done_count = 0
             while done_count < len(self.animations):
-
-                remove_list = []
 
                 for animation in self.animations:
                     if self.change_color(animation):
                         done_count += 1
 
-                yield from (asyncio.sleep(1.0/self.leds.fps))
+                yield from (asyncio.sleep(1.0 / self.leds.fps))
         except KeyboardInterrupt:
             raise KeyboardInterrupt
-        except:
+        except Exception:
             print("error in animation loop for {}".format(self))
             import sys
             import traceback
@@ -379,18 +376,11 @@ class LightFpsController:
     def _updateLoop(self):
         while True:
             try:
-                if self.needsUpdate == True:
+                if self.needsUpdate is True:
                     self.driver.update(self.ledsData)
                     self.needsUpdate = False
             except KeyboardInterrupt:
                 raise KeyboardInterrupt
-            """except:
-				print("bork in _doUpdate")
-				import traceback, sys
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-				traceback.print_exception(exc_type, exc_value, exc_traceback,
-	                          limit=8, file=sys.stdout)"""
 
             yield from asyncio.sleep(1.0 / self.fps)
 
@@ -504,7 +494,8 @@ class FakeSpi:
 class Apa102Driver(BaseDriver):
 
     def __init__(self, freqs=8000000, debug=None,
-                 brightness=100, pixel_order=PixelFormat.gbr):
+                 brightness=100, pixel_order=PixelFormat.gbr,
+                 spi_dev=None):
         BaseDriver.__init__(self)
         self.supportsChangeColor = False
 
@@ -558,7 +549,7 @@ class Apa102Driver(BaseDriver):
         return np.sum((ledsData / [255, 255, 255] * 0.2))
 
     def update(self, ledsData, force=False):
-        if self.numLeds == None:
+        if self.numLeds is None:
             self.numLeds = len(ledsData)
 
         data = bytearray()
@@ -616,7 +607,6 @@ class OpenCvSimpleDriver(BaseDriver):
         y = 0
 
         for color in ledsData:
-            #print("color = {}".format(color))
             self.image[y: y + self.size, x: x + self.size] = color[::-1]
             x += self.size
             i += 1
@@ -634,7 +624,7 @@ class OpenCvSimpleDriver(BaseDriver):
     def process_cv2_mainloop(self):
         while True:
             self.waitKey(1)
-            yield from asyncio.sleep(1.0/60.0)  # 60 fps...
+            yield from asyncio.sleep(1.0 / 60.0)  # 60 fps...
 
 
 class DummyDriver(BaseDriver):
@@ -652,10 +642,12 @@ def getDriver(driverName=None):
     try:
         from lights.lightclient import LightClient, LightClientWss, LightClientUdp
     except ImportError:
-        from photons import LightClient, LightClientWss, LightClientUdp
+        from photons.lightclient import LightClient, LightClientWss,  LightClientUdp
 
-    drivers = {"Ws2801": Ws2801Driver, "Apa102": Apa102Driver, "OpenCV": OpenCvSimpleDriver, "LightClient": LightClient,
-               "OpenCVSimple": OpenCvSimpleDriver, "Dummy": DummyDriver, "LightClientWss": LightClientWss,
+    drivers = {"Ws2801": Ws2801Driver, "Apa102": Apa102Driver,
+               "OpenCV": OpenCvSimpleDriver, "LightClient": LightClient,
+               "OpenCVSimple": OpenCvSimpleDriver,
+               "Dummy": DummyDriver, "LightClientWss": LightClientWss,
                "LightClientUdp": LightClientUdp}
 
     if driverName and driverName in drivers:

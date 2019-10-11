@@ -1,155 +1,138 @@
 import asyncio
 from photons import LightProtocol
-from binascii import hexlify
-from wss.wssserver import Server, server_main
 
 
-class LightServerWss(Server):
-	def __init__(self, leds=None, port=None, iface = "localhost", useSsl=False, sslCert = "server.crt", sslKey = "server.key", debug=False):
-		self.leds = leds
-		self.port = port
-		self.iface = iface
+def server_main(ServerClass, **kwargs):
 
-		#Keep about 5 seconds worth of data
-		self.queue = asyncio.Queue(maxsize = self.leds.fps * 5)
+    import argparse
 
-		self.parser = LightProtocol(leds = self.leds, debug = debug)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ssl', dest="usessl",
+                        help="use ssl.", action='store_true')
+    parser.add_argument('--debug', dest="debug",
+                        help="turn on debugging.", action='store_true')
+    parser.add_argument('--sslcert', dest="sslcert",
+                        default="server.crt", nargs=1, help="ssl certificate")
+    parser.add_argument('--sslkey', dest="sslkey",
+                        default="server.key", nargs=1, help="ssl key")
+    parser.add_argument('--port', help="port of server", default=9000)
 
-		Server.__init__(self, port = port, useSsl = useSsl, sslCert = sslCert, sslKey = sslKey)
+    args, unknown = parser.parse_known_args()
 
-		asyncio.get_event_loop().create_task(self._processQueue())
+    if args.port:
+        kwargs["port"] = args.port
 
+    s = ServerClass(useSsl=args.usessl, **kwargs)
+    s.debug = args.debug
 
-	def onBinaryMessage(self, msg, fromClient):
-		data = bytearray()
-		data.extend(msg)
-
-		"""
-		self.print_debug("message length: {}".format(len(data)))
-		self.print_debug("message data: {}".format(hexlify(data)))
-		"""
-
-		try:
-			self.queue.put_nowait(data)
-		except asyncio.QueueFull:
-			pass #drop message
-
-	@asyncio.coroutine
-	def _processQueue(self):
-		while True:
-
-			data = yield from self.queue.get()
-			self.parser.parse(data)
-
-			yield from asyncio.sleep(1/self.leds.fps)
+    return s
 
 
 class LightServer(asyncio.Protocol):
 
-	def __init__(self, leds, port, iface = "localhost", debug=False, **kwargs):
+    def __init__(self, leds, port, iface="localhost", debug=False, **kwargs):
 
-		self.leds = leds
-		self.port = port
-		self.iface = iface
-		self.debug = debug
-		self.parser = LightProtocol(leds = self.leds, debug = debug)
-		self.queue = asyncio.Queue(maxsize = self.leds.fps * 5)
+        self.leds = leds
+        self.port = port
+        self.iface = iface
+        self.debug = debug
+        self.parser = LightProtocol(leds=self.leds, debug=debug)
+        self.queue = asyncio.Queue(maxsize=self.leds.fps * 5)
 
-		asyncio.get_event_loop().create_task(self._processQueue())
+        asyncio.get_event_loop().create_task(self._processQueue())
 
-	def start(self):
-		loop = asyncio.get_event_loop()
+    def start(self):
+        loop = asyncio.get_event_loop()
 
-		factory = loop.create_server(lambda: self,
-			host = self.iface, port = self.port)
+        factory = loop.create_server(lambda: self,
+                                     host=self.iface, port=self.port)
 
-		self.server = loop.run_until_complete(factory)
+        self.server = loop.run_until_complete(factory)
 
+    def print_debug(self, msg):
+        if self.debug:
+            print(msg)
 
-	def print_debug(self, msg):
-		if self.debug:
-			print(msg)
+    def connection_made(self, transport):
+        # we may have only one client
+        try:
+            self.print_debug("new connection!")
 
-	def connection_made(self, transport):
-		#we may have only one client
-		try:
-			self.print_debug("new connection!")
+            self.client_writer = transport
 
-			self.client_writer = transport
-		
-		except:
-			import traceback, sys
-			exc_type, exc_value, exc_traceback = sys.exc_info()
-			traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-			traceback.print_exception(exc_type, exc_value, exc_traceback,
-	                      limit=8, file=sys.stdout)
+        except Exception:
+            import traceback
+            import sys
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+            traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                      limit=8, file=sys.stdout)
 
-	def data_received(self, data):
-		self.print_debug("new data received")
-		
-		try:
-			self.queue.put_nowait(bytearray(data))
-		except asyncio.QueueFull:
-			pass #drop message
+    def data_received(self, data):
+        self.print_debug("new data received")
 
-	@asyncio.coroutine
-	def _processQueue(self):
-		while True:
+        try:
+            self.queue.put_nowait(bytearray(data))
+        except asyncio.QueueFull:
+            pass  # drop message
 
-			data = yield from self.queue.get()
-			self.parser.parse(data)
+    @asyncio.coroutine
+    def _processQueue(self):
+        while True:
 
-			yield from asyncio.sleep(1/self.leds.fps)
+            data = yield from self.queue.get()
+            self.parser.parse(data)
 
-	def close():
-		self.server.close()
-		asyncio.get_event_loop().run_until_complete(self.server.wait_closed())
+            yield from asyncio.sleep(1 / self.leds.fps)
+
+    def close(self):
+        self.server.close()
+        asyncio.get_event_loop().run_until_complete(
+            self.server.wait_closed())
 
 
 class LightServerUdp(LightServer):
 
-	def __init__(self, *args, **kwargs):
-		LightServer.__init__(self, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        LightServer.__init__(self, *args, **kwargs)
 
-	def start(self):
-		loop = asyncio.get_event_loop()
+    def start(self):
+        loop = asyncio.get_event_loop()
 
-		factory = loop.create_datagram_endpoint(lambda: self,
-			local_addr = (self.iface, self.port))
+        factory = loop.create_datagram_endpoint(lambda: self,
+                                                local_addr=(self.iface,
+                                                            self.port))
 
-		self.server, protocol = loop.run_until_complete(factory)
+        self.server, protocol = loop.run_until_complete(factory)
 
-	def datagram_received(self, data, addr):
-		LightServer.data_received(self, data)
+    def datagram_received(self, data, addr):
+        LightServer.data_received(self, data)
 
 
 if __name__ == "__main__":
-	from photons import LightArray2, OpenCvSimpleDriver, DummyDriver
-	
-	import argparse
+    from photons import LightArray2, OpenCvSimpleDriver
 
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--wss', dest="wss", help="use wss.", action='store_true')
-	parser.add_argument('--udp', dest="udp", help="use udp.", action='store_true')
+    import argparse
 
-	args, unknown = parser.parse_known_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--udp', dest="udp",
+                        help="use udp.", action='store_true')
 
-	num_lights = 200
+    args, unknown = parser.parse_known_args()
 
-	leds = LightArray2(num_lights, OpenCvSimpleDriver(opengl=True), fps=60)
+    num_lights = 200
 
-	sc = LightServer
+    leds = LightArray2(num_lights, OpenCvSimpleDriver(opengl=True), fps=60)
 
-	if args.wss:
-		sc = LightServerWss
+    sc = LightServer
 
-	if args.udp:
-		sc = LightServerUdp
+    if args.udp:
+        sc = LightServerUdp
 
-	server = server_main(ServerClass=sc, leds=leds)
+    server = server_main(ServerClass=sc, leds=leds)
 
-	server.start()
+    server.start()
 
-	asyncio.get_event_loop().run_forever()
+    asyncio.get_event_loop().run_forever()
 
-	server.close()
+    server.close()
