@@ -30,7 +30,7 @@ def server_main(ServerClass, **kwargs):
 
 class LightServer(asyncio.Protocol):
 
-    def __init__(self, leds, port, iface="localhost", debug=False, **kwargs):
+    def __init__(self, leds, port, iface="0.0.0.0", debug=False, **kwargs):
 
         self.leds = leds
         self.port = port
