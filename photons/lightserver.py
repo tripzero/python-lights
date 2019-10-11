@@ -15,7 +15,7 @@ def server_main(ServerClass, **kwargs):
                         default="server.crt", nargs=1, help="ssl certificate")
     parser.add_argument('--sslkey', dest="sslkey",
                         default="server.key", nargs=1, help="ssl key")
-    parser.add_argument('--port', help="port of server", default=9000)
+    parser.add_argument('--port', help="port of server", default=1888)
 
     args, unknown = parser.parse_known_args()
 
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     num_lights = 200
 
-    leds = LightArray2(num_lights, OpenCvSimpleDriver(opengl=True), fps=60)
+    leds = LightArray2(num_lights, OpenCvSimpleDriver(), fps=60)
 
     sc = LightServer
 
