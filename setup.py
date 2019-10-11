@@ -14,7 +14,7 @@ Operating System :: POSIX :: Linux
 """
 
 setup(name='photons',
-      version='1.0',
+      version='1.1',
       description='Python Light module for working with color LEDs',
       author='Kevron Rees',
       author_email='tripzero.kev@gmail.com',
