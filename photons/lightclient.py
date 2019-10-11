@@ -1,54 +1,101 @@
 
 
 import asyncio
-from wss.wssclient import ReconnectAsyncio, Client
-from collections import deque
 import binascii
+import sys
+import traceback
 
 from photons.lightprotocol import LightProtocol
 
-try:
-    range = xrange
-except:
-    pass
 
-
-class LightClientWss(Client, LightProtocol):
-
-    def __init__(self, host=None, port=None, retry=False, loop=None,
-                 debug=False, fps=60):
-        Client.__init__(self, retry=retry, loop=loop)
-        LightProtocol.__init__(self, debug=debug)
-
-        self.fps = fps
-        self.send_queue = asyncio.Queue()
-
+class DebugPrinter:
+    def __init__(self, debug=False):
         self.debug = debug
 
-        if host and port:
-            self.connectTo(host, port, useSsl=False)
+    def print_debug(self, msg):
+        if self.debug:
+            print(msg)
 
-        self.loop.create_task(self._process_send())
 
-    def send(self, msg):
-        self.send_queue.put_nowait(msg)
-        return msg
+class ReconnectAsyncio(DebugPrinter):
+
+    def __init__(self, retry=False, loop=None, debug=False):
+        DebugPrinter.__init__(self, debug)
+        self.address = None
+        self.retry = retry
+        self.loop = loop
+
+        if not loop:
+            self.loop = asyncio.get_event_loop()
+
+    def _connect(self):
+        raise Exception(
+            "_connect() is an abstract class method.  You must implement this")
+
+    def _do_connect(self):
+        if self.retry:
+            self.loop.create_task(self._connect_retry())
+        else:
+            self.loop.create_task(self._connect_once())
 
     @asyncio.coroutine
-    def _process_send(self):
+    def _connect_once(self):
+        try:
+            yield from self._connect()
+
+        except ConnectionRefusedError:
+            self.print_debug("connection refused ({})".format(self.address))
+
+        except OSError:
+            self.print_debug("connection failed ({})".format(self.address))
+
+        except Exception:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+            traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                      file=sys.stdout)
+            self.print_debug("connection failed ({})".format(self.address))
+
+    @asyncio.coroutine
+    def _connect_retry(self):
+        timeout = 5
+        maxtimeout = 60
+
         while True:
+            try:
+                self.print_debug("connecting...")
+                yield from self._connect()
 
-            if self.send_queue.qsize():
-                msg = bytearray()
+                self.print_debug("connected!")
+                return
 
-                while self.send_queue.qsize() > 0:
-                    i = self.send_queue.get_nowait()
-                    msg.extend(i)
+            except ConnectionRefusedError:
+                self.print_debug(
+                    "connection refused ({}). retry in {} seconds...".format(
+                        self.address, timeout))
+                yield from asyncio.sleep(timeout)
+                if timeout < maxtimeout:
+                    timeout += 2
 
-                msg = self.writeHeader(msg)
-                self.sendBinaryMsg(bytes(msg))
+                continue
 
-            yield from asyncio.sleep(1.0 / self.fps)
+            except OSError:
+                self.print_debug(
+                    "connection failed ({}). retry in {} seconds...".format(
+                        self.address, timeout))
+                yield from asyncio.sleep(timeout)
+
+                if timeout < maxtimeout:
+                    timeout += 2
+
+                continue
+
+            except Exception:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                          file=sys.stdout)
+                self.print_debug("connection failed ({})".format(self.address))
 
 
 class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
@@ -78,8 +125,9 @@ class LightClient(asyncio.Protocol, LightProtocol, ReconnectAsyncio):
 
     @asyncio.coroutine
     def _connect(self):
-        yield from asyncio.get_event_loop().create_connection(lambda: self,
-                                                              self.addy, self.port)
+        yield from asyncio.get_event_loop().create_connection(
+            lambda: self,
+            self.addy, self.port)
 
     def connection_made(self, transport):
         self.writer = transport
@@ -341,8 +389,6 @@ if __name__ == "__main__":
                         help="self test", action="store_true")
     parser.add_argument('--num', dest="numLeds",
                         help="number of leds", type=int)
-    parser.add_argument('--wss', dest="wss",
-                        help="use wss socket", action="store_true")
     parser.add_argument('--udp', dest="udp",
                         help="use udp socket", action="store_true")
     parser.add_argument('address', help="address",
@@ -355,9 +401,8 @@ if __name__ == "__main__":
         quit()
 
     client = None
-    if args.wss:
-        client = LightClientWss(debug=args.debug)
-    elif args.udp:
+
+    if args.udp:
         client = LightClientUdp(debug=args.debug)
     else:
         client = LightClient(debug=args.debug)
