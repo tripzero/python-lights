@@ -62,10 +62,10 @@ class Promise:
             ret = self.success()
 
         if ret and isinstance(ret, Promise) and self.promise:
-            #print("promise future returned a promise.  Auto-attaching to chain")
+            # print("promise future returned a promise.  Auto-attaching to chain")
             ret.then(self.promise.call)
         elif self.promise:
-            #print("promise future return value not a promise")
+            # print("promise future return value not a promise")
             self.promise.call()
 
         # this queues up the cleanup after promise.call
@@ -511,10 +511,10 @@ class Apa102Driver(BaseDriver):
         self.brightness = brightness
 
         """
-		Set the color order of the lights.  This is used to convert
-		RGB (the default format) to the right physical colors on the 
-		light.
-		"""
+        Set the color order of the lights.  This is used to convert
+        RGB (the default format) to the right physical colors on the
+        light.
+        """
         self.pixel_order = pixel_order
 
         # Constant data structures:
@@ -639,18 +639,32 @@ class DummyDriver(BaseDriver):
 
 
 def getDriver(driverName=None):
+
+    drivers = {
+        "Ws2801": Ws2801Driver,
+        "Apa102": Apa102Driver,
+        "OpenCV": OpenCvSimpleDriver,
+        "OpenCVSimple": OpenCvSimpleDriver,
+        "Dummy": DummyDriver,
+    }
+
     try:
-        from lights.lightclient import LightClient, LightClientWss, LightClientUdp
+        from photons.lightclient import LightClient, LightClientUdp
+        drivers["LightClient"] = LightClient
+        drivers["LightClientUdp"] = LightClientUdp
     except ImportError:
-        from photons.lightclient import LightClient, LightClientWss,  LightClientUdp
+        pass
 
-    drivers = {"Ws2801": Ws2801Driver, "Apa102": Apa102Driver,
-               "OpenCV": OpenCvSimpleDriver, "LightClient": LightClient,
-               "OpenCVSimple": OpenCvSimpleDriver,
-               "Dummy": DummyDriver, "LightClientWss": LightClientWss,
-               "LightClientUdp": LightClientUdp}
+    try:
+        from photons.serial import SerialDriver
+        drivers['Serial'] = SerialDriver
 
-    if driverName and driverName in drivers:
+    except ImportError as ex:
+        print("serial unsupported")
+        print(ex)
+        pass
+
+    if driverName is not None and driverName in drivers:
         return drivers[driverName]
 
     print("driver {} not supported".format(driverName))
